@@ -1,0 +1,85 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Start Local Stack",
+      "type": "shell",
+      "command": "docker-compose up --build",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Stop Local Stack",
+      "type": "shell",
+      "command": "docker-compose down",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Run Unit Tests",
+      "type": "shell",
+      "command": "mvn test",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Run Integration Tests",
+      "type": "shell",
+      "command": "mvn verify",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "Generate Allure Report",
+      "type": "shell",
+      "command": "allure serve target/allure-results",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "new"
+      }
+    },
+    {
+      "label": "Open Swagger UI",
+      "type": "shell",
+      "command": "start http://localhost:8080/swagger-ui.html",
+      "windows": {
+        "command": "start http://localhost:8080/swagger-ui.html"
+      },
+      "linux": {
+        "command": "xdg-open http://localhost:8080/swagger-ui.html"
+      },
+      "osx": {
+        "command": "open http://localhost:8080/swagger-ui.html"
+      },
+      "group": "build"
+    }
+  ]
+}

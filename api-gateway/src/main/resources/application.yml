@@ -1,0 +1,86 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: auth-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/auth/**
+        - id: order-service
+          uri: http://order-service:8082
+          predicates:
+            - Path=/orders/**
+        - id: market-data-service
+          uri: http://market-data-service:8083
+          predicates:
+            - Path=/market/**
+        - id: compliance-service
+          uri: http://compliance-service:8084
+          predicates:
+            - Path=/compliance/**
+        - id: ledger-service
+          uri: http://ledger-service:8085
+          predicates:
+            - Path=/ledger/**
+        - id: settlement-service
+          uri: http://settlement-service:8086
+          predicates:
+            - Path=/settlement/**
+        - id: audit-service
+          uri: http://audit-service:8087
+          predicates:
+            - Path=/audit/**
+        - id: saga-orchestrator
+          uri: http://saga-orchestrator:8088
+          predicates:
+            - Path=/saga/**
+        - id: surge-simulator
+          uri: http://surge-simulator:8089
+          predicates:
+            - Path=/admin/chaos/**
+        - id: market-admin
+          uri: http://market-data-service:8083
+          predicates:
+            - Path=/admin/market/**
+        - id: settlement-admin
+          uri: http://settlement-service:8086
+          predicates:
+            - Path=/admin/settlement/**
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: auth-service
+        url: /auth/v3/api-docs
+      - name: order-service
+        url: /orders/v3/api-docs
+      - name: market-data-service
+        url: /market/v3/api-docs
+      - name: compliance-service
+        url: /compliance/v3/api-docs
+      - name: ledger-service
+        url: /ledger/v3/api-docs
+      - name: settlement-service
+        url: /settlement/v3/api-docs
+      - name: audit-service
+        url: /audit/v3/api-docs
+      - name: saga-orchestrator
+        url: /saga/v3/api-docs
+      - name: surge-simulator
+        url: /admin/chaos/v3/api-docs
+    path: /swagger-ui.html
+    config-url: /v3/api-docs/swagger-config
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
