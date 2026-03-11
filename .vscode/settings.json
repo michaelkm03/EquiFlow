@@ -1,0 +1,17 @@
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "java.jdt.ls.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.18.8-hotspot",
+    "java.configuration.runtimes": [
+        {
+            "name": "JavaSE-17",
+            "path": "C:\\Program Files\\Microsoft\\jdk-17.0.18.8-hotspot",
+            "default": true
+        }
+    ],
+    "java.test.config": {
+        "vmArgs": [
+            "--enable-preview"
+        ]
+    },
+    "java.test.defaultConfig": "default"
+}

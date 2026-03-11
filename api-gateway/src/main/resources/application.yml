@@ -7,6 +7,62 @@ spring:
   cloud:
     gateway:
       routes:
+        # API docs routes — rewrite prefix before forwarding
+        - id: auth-service-api-docs
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/auth/v3/api-docs
+          filters:
+            - RewritePath=/auth/(?<remaining>.*), /$\{remaining}
+        - id: order-service-api-docs
+          uri: http://order-service:8082
+          predicates:
+            - Path=/orders/v3/api-docs
+          filters:
+            - RewritePath=/orders/(?<remaining>.*), /$\{remaining}
+        - id: market-data-service-api-docs
+          uri: http://market-data-service:8083
+          predicates:
+            - Path=/market/v3/api-docs
+          filters:
+            - RewritePath=/market/(?<remaining>.*), /$\{remaining}
+        - id: compliance-service-api-docs
+          uri: http://compliance-service:8084
+          predicates:
+            - Path=/compliance/v3/api-docs
+          filters:
+            - RewritePath=/compliance/(?<remaining>.*), /$\{remaining}
+        - id: ledger-service-api-docs
+          uri: http://ledger-service:8085
+          predicates:
+            - Path=/ledger/v3/api-docs
+          filters:
+            - RewritePath=/ledger/(?<remaining>.*), /$\{remaining}
+        - id: settlement-service-api-docs
+          uri: http://settlement-service:8086
+          predicates:
+            - Path=/settlement/v3/api-docs
+          filters:
+            - RewritePath=/settlement/(?<remaining>.*), /$\{remaining}
+        - id: audit-service-api-docs
+          uri: http://audit-service:8087
+          predicates:
+            - Path=/audit/v3/api-docs
+          filters:
+            - RewritePath=/audit/(?<remaining>.*), /$\{remaining}
+        - id: saga-orchestrator-api-docs
+          uri: http://saga-orchestrator:8088
+          predicates:
+            - Path=/saga/v3/api-docs
+          filters:
+            - RewritePath=/saga/(?<remaining>.*), /$\{remaining}
+        - id: surge-simulator-api-docs
+          uri: http://surge-simulator:8089
+          predicates:
+            - Path=/admin/chaos/v3/api-docs
+          filters:
+            - RewritePath=/admin/chaos/(?<remaining>.*), /$\{remaining}
+        # General service routes
         - id: auth-service
           uri: http://auth-service:8081
           predicates:

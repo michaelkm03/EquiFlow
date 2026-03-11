@@ -41,19 +41,20 @@ public class OrderSaga {
     @Transactional
     public Saga execute(Saga saga, Map<String, Object> orderEvent) {
         log.info("Executing OrderSaga for orderId={}", saga.getOrderId());
+        final Saga sagaRef = saga;
 
         // Step 1: Compliance check
         SagaStep step1 = executeStep(saga, 1, "COMPLIANCE_CHECK", () -> {
             Map<String, Object> compRequest = new HashMap<>();
-            compRequest.put("orderId", saga.getOrderId().toString());
-            compRequest.put("userId", saga.getUserId().toString());
+            compRequest.put("orderId", sagaRef.getOrderId().toString());
+            compRequest.put("userId", sagaRef.getUserId().toString());
             compRequest.put("ticker", orderEvent.get("ticker"));
             compRequest.put("side", orderEvent.get("side"));
             compRequest.put("quantity", orderEvent.get("quantity"));
 
             // Fetch available cash for funds check
             try {
-                Map<String, Object> account = ledgerClient.getAccount(saga.getUserId().toString());
+                Map<String, Object> account = ledgerClient.getAccount(sagaRef.getUserId().toString());
                 compRequest.put("availableCash", account.get("availableCash"));
                 Object price = orderEvent.get("limitPrice");
                 if (price != null && orderEvent.get("quantity") != null) {
@@ -80,7 +81,7 @@ public class OrderSaga {
 
         // Step 2: Match order in order book
         SagaStep step2 = executeStep(saga, 2, "ORDER_MATCHING", () ->
-                orderClient.triggerMatch(saga.getOrderId())
+                orderClient.triggerMatch(sagaRef.getOrderId())
         );
 
         if ("FAILED".equals(step2.getStatus())) {
@@ -92,8 +93,8 @@ public class OrderSaga {
         String fillPayload = step2.getResponsePayload();
         SagaStep step3 = executeStep(saga, 3, "LEDGER_DEBIT", () -> {
             Map<String, Object> debitReq = new HashMap<>();
-            debitReq.put("userId", saga.getUserId().toString());
-            debitReq.put("orderId", saga.getOrderId().toString());
+            debitReq.put("userId", sagaRef.getUserId().toString());
+            debitReq.put("orderId", sagaRef.getOrderId().toString());
 
             // Parse fill details from order response
             try {
@@ -108,7 +109,7 @@ public class OrderSaga {
                     debitReq.put("amount", amount);
                     debitReq.put("ticker", ticker);
                     debitReq.put("quantity", filledQty);
-                    debitReq.put("description", "Order fill debit for " + saga.getOrderId());
+                    debitReq.put("description", "Order fill debit for " + sagaRef.getOrderId());
                 }
             } catch (Exception e) {
                 log.warn("Could not parse match result, using order event data: {}", e.getMessage());
@@ -125,13 +126,14 @@ public class OrderSaga {
         // Step 4: Create settlement record
         SagaStep step4 = executeStep(saga, 4, "SETTLEMENT_CREATE", () -> {
             Map<String, Object> settlReq = new HashMap<>();
-            settlReq.put("orderId", saga.getOrderId().toString());
-            settlReq.put("userId", saga.getUserId().toString());
+            settlReq.put("orderId", sagaRef.getOrderId().toString());
+            settlReq.put("userId", sagaRef.getUserId().toString());
             settlReq.put("ticker", orderEvent.get("ticker"));
             settlReq.put("side", orderEvent.get("side"));
 
             try {
-                Map<?, ?> matchResult = objectMapper.readValue(fillPayload, Map.class);
+                @SuppressWarnings("unchecked")
+                Map<String, Object> matchResult = objectMapper.readValue(fillPayload, Map.class);
                 settlReq.put("quantity", matchResult.getOrDefault("filledQty", orderEvent.get("quantity")));
                 settlReq.put("fillPrice", matchResult.getOrDefault("filledPrice", "0"));
             } catch (Exception e) {
