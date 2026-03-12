@@ -1,7 +1,7 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 
-const AUTH_URL = process.env.AUTH_URL || 'http://localhost:8081';
-const GATEWAY_URL = process.env.BASE_URL || 'http://localhost:8080';
+const AUTH_URL = process.env['AUTH_URL'] || 'http://localhost:8081';
+const GATEWAY_URL = process.env['BASE_URL'] || 'http://localhost:8080';
 
 let authToken: string;
 let apiRequest: APIRequestContext;
