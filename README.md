@@ -6,39 +6,6 @@ A high-integrity US equity trading engine built with Java 21 and Spring Boot 3.x
 
 ---
 
-## Architecture
-
-```mermaid
-graph TD
-    Client["REST Client / Swagger UI"]
-    GW["api-gateway :8080"]
-
-    subgraph Services
-        AUTH["auth-service :8081"]
-        ORDER["order-service :8082"]
-        MARKET["market-data-service :8083"]
-        COMPLY["compliance-service :8084"]
-        LEDGER["ledger-service :8085"]
-        SETTLE["settlement-service :8086"]
-        AUDIT["audit-service :8087"]
-        SAGA["saga-orchestrator :8088"]
-        CHAOS["surge-simulator :8089"]
-    end
-
-    subgraph Infrastructure
-        PG["PostgreSQL :5432"]
-        REDIS["Redis :6379"]
-        KAFKA["Kafka :9092"]
-    end
-
-    Client --> GW --> Services
-    Services --> PG & REDIS & KAFKA
-```
-
-**Saga flow:** `Order submitted → Compliance check → Order matching → Ledger debit → Settlement record → Audit log`
-
----
-
 ## Features
 
 - **Order book** — real bid/ask matching with price-time priority. Market orders fill via existing limits then market maker. Limit orders queue and expire at 4 PM ET.

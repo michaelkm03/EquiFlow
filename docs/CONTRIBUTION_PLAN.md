@@ -69,10 +69,9 @@ and ship the stop-loss order type requested by early users.
 ---
 
 ### EQ-101 · Stop-Loss Order Type
-**Epic:** Order Management
-**Type:** Feature
-**Points:** 5
-**Priority:** P0
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Order Management | Feature | 5 | P0 |
 
 **Product Request:**
 > "Users are asking for downside protection. We need stop-loss orders so they
@@ -136,10 +135,9 @@ through the normal order execution flow via the saga orchestrator.
 ---
 
 ### EQ-102 · Order History — Filtering and Pagination
-**Epic:** Order Management
-**Type:** Feature
-**Points:** 3
-**Priority:** P0
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Order Management | Feature | 3 | P0 |
 
 **Product Request:**
 > "Right now users get a flat dump of every order they've ever placed. We need
@@ -191,10 +189,9 @@ modified — this is a query-layer change only.
 ---
 
 ### EQ-103 · Portfolio P&L Summary Endpoint
-**Epic:** Portfolio Analytics
-**Type:** Feature
-**Points:** 5
-**Priority:** P1
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Portfolio Analytics | Feature | 5 | P1 |
 
 **Product Request:**
 > "Users have no way to see whether they're up or down overall. We need a
@@ -250,10 +247,9 @@ is a read-only, synchronous operation — no new data is persisted.
 ---
 
 ### EQ-104 · Price Alerts — Notify When Target Price Is Hit
-**Epic:** Notifications
-**Type:** Feature
-**Points:** 5
-**Priority:** P1
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Notifications | Feature | 5 | P1 |
 
 **Product Request:**
 > "Users want to know when a stock hits their target price without having to
@@ -323,10 +319,9 @@ delivery channel (email, push) is out of scope for this story.
 ---
 
 ### EQ-110 · CI Pipeline (GitHub Actions)
-**Epic:** Platform
-**Type:** Engineering
-**Points:** 2
-**Priority:** P0
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 2 | P0 |
 
 **Services Affected:** All modules (build and test validation only — no runtime changes)
 
@@ -341,10 +336,9 @@ delivery channel (email, push) is out of scope for this story.
 ---
 
 ### EQ-111 · Fix Java Version Mismatch
-**Epic:** Platform
-**Type:** Engineering
-**Points:** 1
-**Priority:** P0 — blocks EQ-110
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 1 | P0 — blocks EQ-110 |
 
 **Services Affected:** All modules (build configuration only)
 
@@ -355,10 +349,9 @@ delivery channel (email, push) is out of scope for this story.
 ---
 
 ### EQ-112 · LedgerService Test Coverage
-**Epic:** Platform
-**Type:** Engineering
-**Points:** 5
-**Priority:** P0
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 5 | P0 |
 
 **Services Affected:** `ledger-service`
 
@@ -372,10 +365,9 @@ delivery channel (email, push) is out of scope for this story.
 ---
 
 ### EQ-113 · Saga Compensation / Rollback
-**Epic:** Platform
-**Type:** Engineering
-**Points:** 8
-**Priority:** P0
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 8 | P0 |
 
 **Services Affected:**
 
@@ -399,9 +391,9 @@ delivery channel (email, push) is out of scope for this story.
 ---
 
 ### EQ-201 · Trade Confirmation Documents
-**Epic:** Compliance & Reporting
-**Type:** Feature
-**Points:** 5
+| Epic | Type | Points |
+|------|------|--------|
+| Compliance & Reporting | Feature | 5 |
 
 **Product Request:**
 > "Regulatory requirement. Every executed trade needs a confirmation document
@@ -455,9 +447,9 @@ logged by `audit-service` for regulatory traceability.
 ---
 
 ### EQ-202 · Account Funding — Deposit and Withdrawal
-**Epic:** Account Management
-**Type:** Feature
-**Points:** 8
+| Epic | Type | Points |
+|------|------|--------|
+| Account Management | Feature | 8 |
 
 **Product Request:**
 > "Users can't do anything useful until they can fund their account. We need
@@ -516,9 +508,9 @@ immutable entry for reconciliation.
 ---
 
 ### EQ-203 · Wash-Sale Compliance — User-Facing Warning
-**Epic:** Compliance & Reporting
-**Type:** Feature
-**Points:** 3
+| Epic | Type | Points |
+|------|------|--------|
+| Compliance & Reporting | Feature | 3 |
 
 **Product Request:**
 > "Right now wash-sale violations are silently blocked. Users don't understand
