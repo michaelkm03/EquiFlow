@@ -140,3 +140,8 @@ management:
   endpoint:
     health:
       show-details: always
+
+logging:
+  level:
+    com.equiflow: INFO
+    org.springframework.cloud.gateway: WARN

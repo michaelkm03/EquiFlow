@@ -1,0 +1,1992 @@
+{
+  "info": {
+    "_postman_id": "equiflow-api-collection-v2",
+    "name": "Equiflow API",
+    "description": "Complete API collection for the Equiflow trading platform.\n\nAll requests route through the API Gateway at {{base_url}} (default: http://localhost:8080).\n\n## Quick start\n1. Run all 4 requests in **00 - Setup & Auth** top-to-bottom — this logs in every seeded user and saves their tokens automatically.\n2. Use any individual endpoint folder or jump straight to **11 - Workflows** for guided multi-step flows.\n\n## Seeded users (password: `password123`)\n| User | Role | Ledger |\n|---|---|---|\n| trader1 | TRADER | $100,000 |\n| trader2 | TRADER | $100,000 |\n| regulator1 | REGULATOR | none |\n| bot-operator1 | BOT_OPERATOR | none |\n\n## Order status lifecycle\nPENDING → COMPLIANCE_CHECK → OPEN → FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8080", "description": "API Gateway. Change to target a different environment." },
+    { "key": "trader1_token", "value": "", "description": "Auto-populated by 00 - Setup & Auth / Login trader1" },
+    { "key": "trader2_token", "value": "", "description": "Auto-populated by 00 - Setup & Auth / Login trader2" },
+    { "key": "regulator1_token", "value": "", "description": "Auto-populated by 00 - Setup & Auth / Login regulator1" },
+    { "key": "botoperator1_token", "value": "", "description": "Auto-populated by 00 - Setup & Auth / Login bot-operator1" },
+    { "key": "trader1_id", "value": "a1000000-0000-0000-0000-000000000001", "description": "trader1 UUID (seeded)" },
+    { "key": "trader2_id", "value": "a1000000-0000-0000-0000-000000000004", "description": "trader2 UUID (seeded)" },
+    { "key": "regulator1_id", "value": "a1000000-0000-0000-0000-000000000002", "description": "regulator1 UUID (seeded)" },
+    { "key": "botoperator1_id", "value": "a1000000-0000-0000-0000-000000000003", "description": "bot-operator1 UUID (seeded)" },
+    { "key": "order_id", "value": "", "description": "Auto-saved when you POST /orders" },
+    { "key": "saga_id", "value": "", "description": "Auto-saved when you GET /saga/order/:orderId" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('trader1_token')) {",
+          "    console.warn('[Equiflow] Tokens not set. Run folder \"00 - Setup & Auth\" first.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Setup & Auth",
+      "description": "Run these 4 requests in order before using anything else. Each login saves its token to a collection variable so all subsequent requests are pre-authorised.",
+      "item": [
+        {
+          "name": "Smoke Test — GET /market/prices",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/market/prices", "host": ["{{base_url}}"], "path": ["market","prices"] },
+            "description": "No auth required. Confirms the stack is up and market data is seeded. Expect 30 tickers."
+          },
+          "response": []
+        },
+        {
+          "name": "Login — trader1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j.token) { pm.collectionVariables.set('trader1_token', j.token); console.log('trader1_token saved'); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"trader1\",\n  \"password\": \"password123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/auth/token", "host": ["{{base_url}}"], "path": ["auth","token"] },
+            "description": "Saves token to {{trader1_token}}. trader1 has a $100,000 funded ledger account and can place orders."
+          },
+          "response": []
+        },
+        {
+          "name": "Login — trader2",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j.token) { pm.collectionVariables.set('trader2_token', j.token); console.log('trader2_token saved'); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"trader2\",\n  \"password\": \"password123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/auth/token", "host": ["{{base_url}}"], "path": ["auth","token"] },
+            "description": "Saves token to {{trader2_token}}. trader2 has a $100,000 funded ledger account and can place orders."
+          },
+          "response": []
+        },
+        {
+          "name": "Login — regulator1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j.token) { pm.collectionVariables.set('regulator1_token', j.token); console.log('regulator1_token saved'); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"regulator1\",\n  \"password\": \"password123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/auth/token", "host": ["{{base_url}}"], "path": ["auth","token"] },
+            "description": "Saves token to {{regulator1_token}}. Required for GET /auth/users and market admin endpoints."
+          },
+          "response": []
+        },
+        {
+          "name": "Login — bot-operator1",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j.token) { pm.collectionVariables.set('botoperator1_token', j.token); console.log('botoperator1_token saved'); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"username\": \"bot-operator1\",\n  \"password\": \"password123\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{base_url}}/auth/token", "host": ["{{base_url}}"], "path": ["auth","token"] },
+            "description": "Saves token to {{botoperator1_token}}. Required for chaos and market scenario admin endpoints."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Auth",
+      "description": "JWT token issuance and validation. Port 8081, routed via gateway at /auth/**.",
+      "item": [
+        {
+          "name": "POST /auth/token — Issue JWT Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.token) {",
+                  "    pm.collectionVariables.set('token', json.token);",
+                  "    console.log('Token saved to collection variable');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"trader1\",\n  \"password\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/token",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "token"]
+            },
+            "description": "Authenticates a user and returns a signed JWT bearer token. The test script automatically saves the token to the `token` collection variable.\n\n**Roles:** TRADER, REGULATOR, BOT_OPERATOR\n\n**Validation:**\n- `username`: required, non-blank\n- `password`: required, non-blank"
+          },
+          "response": [
+            {
+              "name": "200 OK — trader1",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"trader1\",\n  \"password\": \"password123\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/auth/token" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0cmFkZXIxIiwicm9sZSI6IlRSQURFUiIsInVzZXJJZCI6ImExMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMSIsImlhdCI6MTcxMDY4MDAwMCwiZXhwIjoxNzEwNzY2NDAwfQ.example_signature\",\n  \"expiresAt\": \"2024-03-18T10:00:00Z\",\n  \"role\": \"TRADER\",\n  \"username\": \"trader1\"\n}"
+            },
+            {
+              "name": "200 OK — regulator1",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"regulator1\",\n  \"password\": \"password123\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/auth/token" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWd1bGF0b3IxIiwicm9sZSI6IlJFR1VMQVRPUiIsInVzZXJJZCI6ImExMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMiIsImlhdCI6MTcxMDY4MDAwMCwiZXhwIjoxNzEwNzY2NDAwfQ.example_signature\",\n  \"expiresAt\": \"2024-03-18T10:00:00Z\",\n  \"role\": \"REGULATOR\",\n  \"username\": \"regulator1\"\n}"
+            },
+            {
+              "name": "401 Unauthorized — bad credentials",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"username\": \"trader1\",\n  \"password\": \"wrongpassword\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/auth/token" }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"timestamp\": \"2024-03-17T17:00:00Z\",\n  \"status\": 401,\n  \"error\": \"Unauthorized\",\n  \"message\": \"Invalid credentials\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /auth/validate — Validate Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/validate",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "validate"]
+            },
+            "description": "Validates the JWT token from the Authorization header. The collection-level Bearer auth will automatically populate the Authorization header from the `token` variable."
+          },
+          "response": [
+            {
+              "name": "200 OK — valid token",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer eyJhbGci..." }],
+                "url": { "raw": "{{base_url}}/auth/validate" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"valid\": true,\n  \"timestamp\": \"2024-03-17T17:05:00Z\"\n}"
+            },
+            {
+              "name": "401 Unauthorized — expired/invalid token",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer invalid_token" }],
+                "url": { "raw": "{{base_url}}/auth/validate" }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"valid\": false,\n  \"error\": \"Token invalid or expired\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /auth/users — List All Users (REGULATOR only)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/users",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "users"]
+            },
+            "description": "Returns all registered users. Requires REGULATOR role. Use the `regulator1` token to call this endpoint."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/auth/users" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"a1000000-0000-0000-0000-000000000001\",\n    \"username\": \"trader1\",\n    \"role\": \"TRADER\",\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"lastLoginAt\": \"2024-03-17T17:00:00Z\"\n  },\n  {\n    \"id\": \"a1000000-0000-0000-0000-000000000002\",\n    \"username\": \"regulator1\",\n    \"role\": \"REGULATOR\",\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"lastLoginAt\": \"2024-03-17T16:00:00Z\"\n  },\n  {\n    \"id\": \"a1000000-0000-0000-0000-000000000003\",\n    \"username\": \"bot-operator1\",\n    \"role\": \"BOT_OPERATOR\",\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"lastLoginAt\": null\n  }\n]"
+            },
+            {
+              "name": "403 Forbidden — not a REGULATOR",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/auth/users" }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"timestamp\": \"2024-03-17T17:00:00Z\",\n  \"status\": 403,\n  \"error\": \"Forbidden\",\n  \"message\": \"Access Denied\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /auth/.well-known/jwks.json — JWKS",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/.well-known/jwks.json",
+              "host": ["{{base_url}}"],
+              "path": ["auth", ".well-known", "jwks.json"]
+            },
+            "description": "Returns the JSON Web Key Set used by other services to verify JWT tokens. No authentication required. Note: because this service uses HMAC-SHA256 (symmetric), no public keys are returned — other services share the JWT_SECRET."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/auth/.well-known/jwks.json" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"keys\": [],\n  \"algorithm\": \"HS256\",\n  \"note\": \"Symmetric HMAC-SHA256 - use shared JWT_SECRET for validation\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Orders",
+      "description": "Order submission, status, cancellation, and order book. Port 8082, routed via gateway at /orders/**.\n\nOrder lifecycle: PENDING → COMPLIANCE_CHECK → OPEN → FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED\n\nOrder sides: BUY, SELL\nOrder types: MARKET (no limitPrice needed), LIMIT (limitPrice required)",
+      "item": [
+        {
+          "name": "POST /orders — Submit New Order (MARKET BUY)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.id) {",
+                  "    pm.collectionVariables.set('order_id', json.id);",
+                  "    console.log('Order ID saved:', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/orders",
+              "host": ["{{base_url}}"],
+              "path": ["orders"]
+            },
+            "description": "Submits a new BUY or SELL order. The user identity is derived from the JWT token — no userId field is needed in the body.\n\n**MARKET order:** Omit `limitPrice`. Fills at current market price.\n**LIMIT order:** Include `limitPrice`. Fills only when market price meets the limit.\n\n**Validation:**\n- `ticker`: required, max 10 chars\n- `side`: required — BUY or SELL\n- `type`: required — MARKET or LIMIT\n- `quantity`: required, positive number\n- `limitPrice`: required and positive only for LIMIT orders\n\nThe test script automatically saves the returned `id` as the `order_id` collection variable."
+          },
+          "response": [
+            {
+              "name": "201 Created — MARKET BUY order",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}"
+                },
+                "url": { "raw": "{{base_url}}/orders" }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:00Z\"\n}"
+            },
+            {
+              "name": "201 Created — LIMIT SELL order",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"TSLA\",\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"limitPrice\": 250.00\n}"
+                },
+                "url": { "raw": "{{base_url}}/orders" }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000002\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"TSLA\",\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"limitPrice\": 250.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:00Z\"\n}"
+            },
+            {
+              "name": "400 Bad Request — missing required field",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\"\n}" },
+                "url": { "raw": "{{base_url}}/orders" }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"timestamp\": \"2024-03-17T17:00:00Z\",\n  \"status\": 400,\n  \"error\": \"Bad Request\",\n  \"message\": \"Order type is required; Quantity is required\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /orders/:orderId — Get Order by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "{{order_id}}"]
+            },
+            "description": "Retrieves a single order by UUID. Only the order's owning user can view it."
+          },
+          "response": [
+            {
+              "name": "200 OK — FILLED order",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/orders/b2000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"filledPrice\": 172.35,\n  \"filledQty\": 10,\n  \"status\": \"FILLED\",\n  \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:05Z\"\n}"
+            },
+            {
+              "name": "200 OK — REJECTED order",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/orders/b2000000-0000-0000-0000-000000000099" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000099\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 999999,\n  \"limitPrice\": null,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"REJECTED\",\n  \"sagaId\": \"c3000000-0000-0000-0000-000000000099\",\n  \"rejectionReason\": \"Insufficient funds: required $172,350,000.00, available $100,000.00\",\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:01Z\"\n}"
+            },
+            {
+              "name": "404 Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/orders/00000000-0000-0000-0000-000000000000" }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"timestamp\": \"2024-03-17T17:00:00Z\",\n  \"status\": 404,\n  \"error\": \"Not Found\",\n  \"message\": \"Order not found\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /orders — List My Orders (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders?page=0&size=20",
+              "host": ["{{base_url}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "page", "value": "0", "description": "Zero-based page index (default: 0)" },
+                { "key": "size", "value": "20", "description": "Page size (default: 20)" }
+              ]
+            },
+            "description": "Returns a paginated list of orders belonging to the authenticated user, sorted by `createdAt` descending."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/orders?page=0&size=20" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"content\": [\n    {\n      \"id\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"ticker\": \"AAPL\",\n      \"side\": \"BUY\",\n      \"type\": \"MARKET\",\n      \"quantity\": 10,\n      \"limitPrice\": null,\n      \"filledPrice\": 172.35,\n      \"filledQty\": 10,\n      \"status\": \"FILLED\",\n      \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n      \"rejectionReason\": null,\n      \"createdAt\": \"2024-03-17T17:00:00Z\",\n      \"expiresAt\": \"2024-03-18T17:00:00Z\",\n      \"updatedAt\": \"2024-03-17T17:00:05Z\"\n    }\n  ],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 20,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 1,\n  \"totalPages\": 1,\n  \"last\": true,\n  \"first\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE /orders/:orderId — Cancel Order",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "{{order_id}}"]
+            },
+            "description": "Cancels a PENDING order. Returns 409 if the order has already progressed past the cancellable state (e.g., already FILLED or in MATCHING)."
+          },
+          "response": [
+            {
+              "name": "200 OK — cancelled",
+              "originalRequest": {
+                "method": "DELETE",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/orders/b2000000-0000-0000-0000-000000000002" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000002\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"TSLA\",\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"limitPrice\": 250.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"CANCELLED\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:05:00Z\"\n}"
+            },
+            {
+              "name": "409 Conflict — already filled",
+              "originalRequest": {
+                "method": "DELETE",
+                "url": { "raw": "{{base_url}}/orders/b2000000-0000-0000-0000-000000000001" }
+              },
+              "status": "Conflict",
+              "code": 409,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"timestamp\": \"2024-03-17T17:00:00Z\",\n  \"status\": 409,\n  \"error\": \"Conflict\",\n  \"message\": \"Order cannot be cancelled in status: FILLED\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /orders/:orderId/match — Trigger Matching (internal/saga)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders/{{order_id}}/match",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "{{order_id}}", "match"]
+            },
+            "description": "Internal endpoint used by the Saga Orchestrator to trigger order matching. Under normal operation you do not need to call this manually — the saga calls it automatically after compliance passes.\n\nCalling this directly is useful for debugging a stalled saga."
+          },
+          "response": [
+            {
+              "name": "200 OK — matched/filled",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/orders/b2000000-0000-0000-0000-000000000001/match" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"filledPrice\": 172.35,\n  \"filledQty\": 10,\n  \"status\": \"FILLED\",\n  \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:03Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /orders/book/:ticker — Order Book Snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders/book/AAPL",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "book", "AAPL"]
+            },
+            "description": "Returns a snapshot of the current order book for a given ticker symbol, showing grouped bid (BUY) and ask (SELL) price levels."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/orders/book/AAPL" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"ticker\": \"AAPL\",\n  \"bids\": [\n    { \"price\": 172.00, \"quantity\": 50 },\n    { \"price\": 171.50, \"quantity\": 100 }\n  ],\n  \"asks\": [\n    { \"price\": 172.50, \"quantity\": 30 },\n    { \"price\": 173.00, \"quantity\": 75 }\n  ],\n  \"snapshotAt\": \"2024-03-17T17:00:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Market Data",
+      "description": "Real-time simulated market price data. Port 8083, routed via gateway at /market/**.",
+      "item": [
+        {
+          "name": "GET /market/prices — Get All Ticker Prices",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market/prices",
+              "host": ["{{base_url}}"],
+              "path": ["market", "prices"]
+            },
+            "description": "Returns current price data for all tracked tickers. No authentication required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/market/prices" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"ticker\": \"AAPL\",\n    \"companyName\": \"Apple Inc.\",\n    \"currentPrice\": 172.35,\n    \"baselinePrice\": 170.00,\n    \"openPrice\": 171.00,\n    \"highPrice\": 173.50,\n    \"lowPrice\": 170.20,\n    \"volume\": 45820000,\n    \"updatedAt\": \"2024-03-17T17:00:00Z\"\n  },\n  {\n    \"ticker\": \"TSLA\",\n    \"companyName\": \"Tesla Inc.\",\n    \"currentPrice\": 248.70,\n    \"baselinePrice\": 250.00,\n    \"openPrice\": 249.00,\n    \"highPrice\": 252.10,\n    \"lowPrice\": 247.00,\n    \"volume\": 31200000,\n    \"updatedAt\": \"2024-03-17T17:00:00Z\"\n  },\n  {\n    \"ticker\": \"GOOGL\",\n    \"companyName\": \"Alphabet Inc.\",\n    \"currentPrice\": 141.20,\n    \"baselinePrice\": 140.00,\n    \"openPrice\": 140.50,\n    \"highPrice\": 142.30,\n    \"lowPrice\": 139.80,\n    \"volume\": 22100000,\n    \"updatedAt\": \"2024-03-17T17:00:00Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /market/prices/:ticker — Get Price for Ticker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market/prices/AAPL",
+              "host": ["{{base_url}}"],
+              "path": ["market", "prices", "AAPL"]
+            },
+            "description": "Returns current price data for a single ticker. No authentication required.\n\nCommon tickers: AAPL, TSLA, GOOGL, MSFT, AMZN, NVDA, META, NFLX, UBER, SPOT"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/market/prices/AAPL" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"ticker\": \"AAPL\",\n  \"companyName\": \"Apple Inc.\",\n  \"currentPrice\": 172.35,\n  \"baselinePrice\": 170.00,\n  \"openPrice\": 171.00,\n  \"highPrice\": 173.50,\n  \"lowPrice\": 170.20,\n  \"volume\": 45820000,\n  \"updatedAt\": \"2024-03-17T17:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /market/prices/:ticker/tick — Simulate Price Tick",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market/prices/AAPL/tick",
+              "host": ["{{base_url}}"],
+              "path": ["market", "prices", "AAPL", "tick"]
+            },
+            "description": "Manually triggers one price tick simulation for the specified ticker. The price will move randomly within the current scenario's volatility parameters. Useful for testing without waiting for the automatic tick schedule."
+          },
+          "response": [
+            {
+              "name": "200 OK — updated price",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/market/prices/AAPL/tick" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"ticker\": \"AAPL\",\n  \"companyName\": \"Apple Inc.\",\n  \"currentPrice\": 172.82,\n  \"baselinePrice\": 170.00,\n  \"openPrice\": 171.00,\n  \"highPrice\": 173.50,\n  \"lowPrice\": 170.20,\n  \"volume\": 45821000,\n  \"updatedAt\": \"2024-03-17T17:01:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /market/status — Market Data Service Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/market/status",
+              "host": ["{{base_url}}"],
+              "path": ["market", "status"]
+            },
+            "description": "Returns current status of the market data service including active scenario information."
+          },
+          "response": [
+            {
+              "name": "200 OK — no active scenario",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/market/status" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"activeScenario\": null,\n  \"scenarioActive\": false,\n  \"triggeredBy\": null,\n  \"startedAt\": null\n}"
+            },
+            {
+              "name": "200 OK — scenario running",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/market/status" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"activeScenario\": \"flash_crash\",\n  \"scenarioActive\": true,\n  \"triggeredBy\": \"regulator1\",\n  \"startedAt\": \"2024-03-17T17:00:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Market Admin (Scenarios)",
+      "description": "Market scenario control. Port 8083, routed via gateway at /admin/market/**.\n\nAvailable scenarios:\n- `flash_crash` — sudden sharp price drop across all tickers\n- `bull_run` — sustained upward price movement\n- `bear_market` — sustained downward pressure\n- `high_volatility` — large random swings in both directions\n- `sector_rotation` — some sectors rise while others fall\n- `liquidity_crisis` — thin order book, wide spreads",
+      "item": [
+        {
+          "name": "POST /admin/market/scenarios/:scenarioName/start — Start Scenario",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/market/scenarios/flash_crash/start",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "market", "scenarios", "flash_crash", "start"]
+            },
+            "description": "Starts a named market scenario. The scenario will affect all subsequent price ticks until stopped.\n\n**Valid scenario names:** `flash_crash`, `bull_run`, `bear_market`, `high_volatility`, `sector_rotation`, `liquidity_crisis`\n\nThe `triggeredBy` value is auto-derived from the JWT token's username."
+          },
+          "response": [
+            {
+              "name": "200 OK — flash_crash started",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/admin/market/scenarios/flash_crash/start" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"activeScenario\": \"flash_crash\",\n  \"scenarioActive\": true,\n  \"triggeredBy\": \"regulator1\",\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"message\": \"Scenario 'flash_crash' started successfully\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/market/scenarios/stop — Stop Active Scenario",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/market/scenarios/stop",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "market", "scenarios", "stop"]
+            },
+            "description": "Stops whichever scenario is currently running. Prices will resume normal random-walk behaviour."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/admin/market/scenarios/stop" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"activeScenario\": null,\n  \"scenarioActive\": false,\n  \"message\": \"Scenario stopped\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/market/scenarios/status — Scenario Engine Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/market/scenarios/status",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "market", "scenarios", "status"]
+            },
+            "description": "Returns the current state of the scenario engine."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/admin/market/scenarios/status" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"activeScenario\": \"bull_run\",\n  \"scenarioActive\": true,\n  \"triggeredBy\": \"regulator1\",\n  \"startedAt\": \"2024-03-17T16:00:00Z\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Compliance",
+      "description": "Compliance checks for order validation. Port 8084, routed via gateway at /compliance/**.\n\nChecks performed:\n1. **Wash-sale check** — detects if the user recently sold the same ticker they are now buying (within 30 days)\n2. **Insufficient-funds check** — verifies `estimatedValue` ≤ `availableCash`",
+      "item": [
+        {
+          "name": "POST /compliance/check — Run Compliance Check",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"quantity\": 10,\n  \"estimatedValue\": 1723.50,\n  \"availableCash\": 100000.00\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/compliance/check",
+              "host": ["{{base_url}}"],
+              "path": ["compliance", "check"]
+            },
+            "description": "Runs compliance checks on an order before it is matched. Normally called by the Saga Orchestrator automatically, but can be called directly for testing.\n\n**Validation:**\n- `orderId`: required UUID\n- `userId`: required UUID\n- `ticker`: required, non-blank\n- `side`: required — BUY or SELL\n- `quantity`: required, positive\n- `estimatedValue`: positive (used for insufficient-funds check)\n- `availableCash`: positive (the user's current available cash)"
+          },
+          "response": [
+            {
+              "name": "200 OK — approved",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"quantity\": 10,\n  \"estimatedValue\": 1723.50,\n  \"availableCash\": 100000.00\n}"
+                },
+                "url": { "raw": "{{base_url}}/compliance/check" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"checkId\": \"d4000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"approved\": true,\n  \"violations\": [],\n  \"message\": \"All compliance checks passed\",\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
+            },
+            {
+              "name": "200 OK — rejected (insufficient funds)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"quantity\": 999999,\n  \"estimatedValue\": 172350000.00,\n  \"availableCash\": 100000.00\n}"
+                },
+                "url": { "raw": "{{base_url}}/compliance/check" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"checkId\": \"d4000000-0000-0000-0000-000000000099\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n  \"approved\": false,\n  \"violations\": [\n    {\n      \"type\": \"INSUFFICIENT_FUNDS\",\n      \"description\": \"Estimated order value $172,350,000.00 exceeds available cash $100,000.00\"\n    }\n  ],\n  \"message\": \"Compliance check failed: 1 violation(s) found\",\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
+            },
+            {
+              "name": "200 OK — rejected (wash-sale)",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000098\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"quantity\": 10,\n  \"estimatedValue\": 1723.50,\n  \"availableCash\": 100000.00\n}"
+                },
+                "url": { "raw": "{{base_url}}/compliance/check" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"checkId\": \"d4000000-0000-0000-0000-000000000098\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000098\",\n  \"approved\": false,\n  \"violations\": [\n    {\n      \"type\": \"WASH_SALE\",\n      \"description\": \"Wash-sale detected: AAPL was sold within the last 30 days\"\n    }\n  ],\n  \"message\": \"Compliance check failed: 1 violation(s) found\",\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /compliance/history/:userId — Compliance History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/compliance/history/{{trader1_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["compliance", "history", "{{trader1_id}}"]
+            },
+            "description": "Returns all compliance check records for a given user ID."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/compliance/history/a1000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"d4000000-0000-0000-0000-000000000001\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"AAPL\",\n    \"result\": \"APPROVED\",\n    \"violations\": \"[]\",\n    \"checkedAt\": \"2024-03-17T17:00:01Z\"\n  },\n  {\n    \"id\": \"d4000000-0000-0000-0000-000000000099\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"AAPL\",\n    \"result\": \"REJECTED\",\n    \"violations\": \"[{\\\"type\\\":\\\"INSUFFICIENT_FUNDS\\\",\\\"description\\\":\\\"...\\\"}]\",\n    \"checkedAt\": \"2024-03-17T17:00:01Z\"\n  }\n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 - Ledger",
+      "description": "Account balances, fund holds, debits, positions, and transaction history. Port 8085, routed via gateway at /ledger/**.\n\nTransaction types: HOLD, RELEASE, DEBIT, CREDIT, SETTLEMENT",
+      "item": [
+        {
+          "name": "GET /ledger/accounts/:userId — Get Account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ledger/accounts/{{trader1_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["ledger", "accounts", "{{trader1_id}}"]
+            },
+            "description": "Returns account balance details for a user. `cashOnHold` is the sum of all active holds for pending orders. `availableCash = cashBalance - cashOnHold`."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/ledger/accounts/a1000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"cashBalance\": 100000.00,\n  \"cashOnHold\": 1723.50,\n  \"availableCash\": 98276.50,\n  \"updatedAt\": \"2024-03-17T17:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /ledger/hold — Place Hold on Funds",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"amount\": 1723.50,\n  \"description\": \"Hold for AAPL BUY MARKET x10\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/ledger/hold",
+              "host": ["{{base_url}}"],
+              "path": ["ledger", "hold"]
+            },
+            "description": "Reserves funds for a pending order. Called by the Saga Orchestrator after compliance approval. Reduces `availableCash` without reducing `cashBalance`.\n\n**Validation:** `userId`, `orderId`, `amount` (positive) are required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"amount\": 1723.50,\n  \"description\": \"Hold for AAPL BUY MARKET x10\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/ledger/hold" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"cashBalance\": 100000.00,\n  \"cashOnHold\": 1723.50,\n  \"availableCash\": 98276.50,\n  \"updatedAt\": \"2024-03-17T17:00:02Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /ledger/release — Release Hold on Funds",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000002\",\n  \"amount\": 1243.50,\n  \"description\": \"Release hold — order cancelled\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/ledger/release",
+              "host": ["{{base_url}}"],
+              "path": ["ledger", "release"]
+            },
+            "description": "Releases a previously placed hold, restoring funds to `availableCash`. Called when an order is cancelled or rejected."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000002\",\n  \"amount\": 1243.50,\n  \"description\": \"Release hold — order cancelled\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/ledger/release" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"cashBalance\": 100000.00,\n  \"cashOnHold\": 0.00,\n  \"availableCash\": 100000.00,\n  \"updatedAt\": \"2024-03-17T17:05:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /ledger/debit — Debit Funds (on Fill)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"amount\": 1723.50,\n  \"ticker\": \"AAPL\",\n  \"quantity\": 10,\n  \"description\": \"Debit for AAPL BUY fill at 172.35\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/ledger/debit",
+              "host": ["{{base_url}}"],
+              "path": ["ledger", "debit"]
+            },
+            "description": "Debits funds from the account upon order fill and updates the user's position for the ticker. Called by the Saga Orchestrator after a successful match.\n\n`ticker` and `quantity` are used to update/create the position record."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"amount\": 1723.50,\n  \"ticker\": \"AAPL\",\n  \"quantity\": 10,\n  \"description\": \"Debit for AAPL BUY fill at 172.35\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/ledger/debit" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"cashBalance\": 98276.50,\n  \"cashOnHold\": 0.00,\n  \"availableCash\": 98276.50,\n  \"updatedAt\": \"2024-03-17T17:00:04Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /ledger/history/:userId — Transaction History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ledger/history/{{trader1_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["ledger", "history", "{{trader1_id}}"]
+            },
+            "description": "Returns all ledger transactions for a user. Transaction types: HOLD, RELEASE, DEBIT, CREDIT, SETTLEMENT."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/ledger/history/a1000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"e5000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n    \"type\": \"HOLD\",\n    \"amount\": 1723.50,\n    \"description\": \"Hold for AAPL BUY MARKET x10\",\n    \"createdAt\": \"2024-03-17T17:00:02Z\"\n  },\n  {\n    \"id\": \"e5000000-0000-0000-0000-000000000002\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n    \"type\": \"DEBIT\",\n    \"amount\": 1723.50,\n    \"description\": \"Debit for AAPL BUY fill at 172.35\",\n    \"createdAt\": \"2024-03-17T17:00:04Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /ledger/positions/:userId — Get Positions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/ledger/positions/{{trader1_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["ledger", "positions", "{{trader1_id}}"]
+            },
+            "description": "Returns all stock positions held by the user. Each position shows quantity held and average cost basis."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/ledger/positions/a1000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"f6000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"AAPL\",\n    \"quantity\": 10,\n    \"averageCost\": 172.35,\n    \"updatedAt\": \"2024-03-17T17:00:04Z\"\n  },\n  {\n    \"id\": \"f6000000-0000-0000-0000-000000000002\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"GOOGL\",\n    \"quantity\": 25,\n    \"averageCost\": 140.85,\n    \"updatedAt\": \"2024-03-16T10:30:00Z\"\n  }\n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 - Settlement",
+      "description": "T+1 settlement processing. Port 8086, routed via gateway at /settlement/**.\n\nSettlement statuses: PENDING_SETTLEMENT → SETTLED / FAILED\n\nSettlement runs automatically on a schedule (T+1). Use the admin endpoint to run manually.",
+      "item": [
+        {
+          "name": "GET /settlement/pending — Get Pending Settlements",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settlement/pending",
+              "host": ["{{base_url}}"],
+              "path": ["settlement", "pending"]
+            },
+            "description": "Returns all settlements with status PENDING_SETTLEMENT (awaiting the next settlement run)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/settlement/pending" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"g7000000-0000-0000-0000-000000000001\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"AAPL\",\n    \"side\": \"BUY\",\n    \"quantity\": 10,\n    \"fillPrice\": 172.35,\n    \"totalAmount\": 1723.50,\n    \"tradeDate\": \"2024-03-17\",\n    \"settlementDate\": \"2024-03-18\",\n    \"status\": \"PENDING_SETTLEMENT\",\n    \"settledAt\": null,\n    \"failureReason\": null,\n    \"createdAt\": \"2024-03-17T17:00:05Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /settlement/history/:userId — Settlement History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settlement/history/{{trader1_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["settlement", "history", "{{trader1_id}}"]
+            },
+            "description": "Returns all settlements (any status) for a given user."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/settlement/history/a1000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"g7000000-0000-0000-0000-000000000001\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"AAPL\",\n    \"side\": \"BUY\",\n    \"quantity\": 10,\n    \"fillPrice\": 172.35,\n    \"totalAmount\": 1723.50,\n    \"tradeDate\": \"2024-03-16\",\n    \"settlementDate\": \"2024-03-17\",\n    \"status\": \"SETTLED\",\n    \"settledAt\": \"2024-03-17T08:00:00Z\",\n    \"failureReason\": null,\n    \"createdAt\": \"2024-03-16T14:30:00Z\"\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "POST /settlement/create — Create Settlement Record (saga)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"quantity\": 10,\n  \"fillPrice\": 172.35\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/settlement/create",
+              "host": ["{{base_url}}"],
+              "path": ["settlement", "create"]
+            },
+            "description": "Creates a new settlement record for a filled order. Called by the Saga Orchestrator after a successful fill. `settlementDate` is automatically set to T+1.\n\nAll fields are required."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"quantity\": 10,\n  \"fillPrice\": 172.35\n}"
+                },
+                "url": { "raw": "{{base_url}}/settlement/create" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"g7000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"quantity\": 10,\n  \"fillPrice\": 172.35,\n  \"totalAmount\": 1723.50,\n  \"tradeDate\": \"2024-03-17\",\n  \"settlementDate\": \"2024-03-18\",\n  \"status\": \"PENDING_SETTLEMENT\",\n  \"settledAt\": null,\n  \"failureReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:05Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /settlement/admin/run — Trigger Settlement Run (admin)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settlement/admin/run",
+              "host": ["{{base_url}}"],
+              "path": ["settlement", "admin", "run"]
+            },
+            "description": "Manually triggers the settlement batch process. Processes all records where `settlementDate` ≤ today and status is PENDING_SETTLEMENT. Returns count of records settled."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/settlement/admin/run" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"settled\": 3,\n  \"message\": \"3 records settled\"\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 - Audit",
+      "description": "Append-only event audit trail. Port 8087, routed via gateway at /audit/**.\n\nAll system events (order submitted, compliance checked, saga steps, fills, settlements) are written here as immutable records via Kafka consumers.",
+      "item": [
+        {
+          "name": "GET /audit/events — All Events (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/audit/events?page=0&size=50",
+              "host": ["{{base_url}}"],
+              "path": ["audit", "events"],
+              "query": [
+                { "key": "page", "value": "0", "description": "Zero-based page index (default: 0)" },
+                { "key": "size", "value": "50", "description": "Page size (default: 50)" }
+              ]
+            },
+            "description": "Returns all audit events across the entire system, paginated."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/audit/events?page=0&size=50" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"content\": [\n    {\n      \"id\": \"h8000000-0000-0000-0000-000000000001\",\n      \"eventType\": \"ORDER_SUBMITTED\",\n      \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"sourceService\": \"order-service\",\n      \"payload\": \"{\\\"ticker\\\":\\\"AAPL\\\",\\\"side\\\":\\\"BUY\\\",\\\"type\\\":\\\"MARKET\\\",\\\"quantity\\\":10}\",\n      \"kafkaTopic\": \"order-events\",\n      \"kafkaOffset\": 1024,\n      \"createdAt\": \"2024-03-17T17:00:00Z\"\n    },\n    {\n      \"id\": \"h8000000-0000-0000-0000-000000000002\",\n      \"eventType\": \"COMPLIANCE_APPROVED\",\n      \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"sourceService\": \"compliance-service\",\n      \"payload\": \"{\\\"checkId\\\":\\\"d4000000-...\\\",\\\"approved\\\":true}\",\n      \"kafkaTopic\": \"compliance-events\",\n      \"kafkaOffset\": 512,\n      \"createdAt\": \"2024-03-17T17:00:01Z\"\n    }\n  ],\n  \"totalElements\": 2,\n  \"totalPages\": 1,\n  \"first\": true,\n  \"last\": true\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /audit/events/order/:orderId — Audit Trail for Order",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/audit/events/order/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["audit", "events", "order", "{{order_id}}"]
+            },
+            "description": "Returns every audit event associated with a specific order, ordered chronologically. Useful for tracing the full lifecycle of a single trade."
+          },
+          "response": [
+            {
+              "name": "200 OK — full order lifecycle",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/audit/events/order/b2000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  { \"id\": \"h8000000-0000-0000-0000-000000000001\", \"eventType\": \"ORDER_SUBMITTED\", \"sourceService\": \"order-service\", \"createdAt\": \"2024-03-17T17:00:00Z\" },\n  { \"id\": \"h8000000-0000-0000-0000-000000000002\", \"eventType\": \"COMPLIANCE_APPROVED\", \"sourceService\": \"compliance-service\", \"createdAt\": \"2024-03-17T17:00:01Z\" },\n  { \"id\": \"h8000000-0000-0000-0000-000000000003\", \"eventType\": \"FUNDS_HELD\", \"sourceService\": \"ledger-service\", \"createdAt\": \"2024-03-17T17:00:02Z\" },\n  { \"id\": \"h8000000-0000-0000-0000-000000000004\", \"eventType\": \"ORDER_MATCHED\", \"sourceService\": \"order-service\", \"createdAt\": \"2024-03-17T17:00:03Z\" },\n  { \"id\": \"h8000000-0000-0000-0000-000000000005\", \"eventType\": \"FUNDS_DEBITED\", \"sourceService\": \"ledger-service\", \"createdAt\": \"2024-03-17T17:00:04Z\" },\n  { \"id\": \"h8000000-0000-0000-0000-000000000006\", \"eventType\": \"SETTLEMENT_CREATED\", \"sourceService\": \"settlement-service\", \"createdAt\": \"2024-03-17T17:00:05Z\" },\n  { \"id\": \"h8000000-0000-0000-0000-000000000007\", \"eventType\": \"SAGA_COMPLETED\", \"sourceService\": \"saga-orchestrator\", \"createdAt\": \"2024-03-17T17:00:05Z\" }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /audit/events/user/:userId — Events for User (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/audit/events/user/{{trader1_id}}?page=0&size=50",
+              "host": ["{{base_url}}"],
+              "path": ["audit", "events", "user", "{{trader1_id}}"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            },
+            "description": "Returns all audit events for a given user, paginated."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/audit/events/user/a1000000-0000-0000-0000-000000000001?page=0&size=50" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"content\": [\n    {\n      \"id\": \"h8000000-0000-0000-0000-000000000001\",\n      \"eventType\": \"ORDER_SUBMITTED\",\n      \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"sourceService\": \"order-service\",\n      \"payload\": \"{\\\"ticker\\\":\\\"AAPL\\\",\\\"side\\\":\\\"BUY\\\"}\",\n      \"kafkaTopic\": \"order-events\",\n      \"kafkaOffset\": 1024,\n      \"createdAt\": \"2024-03-17T17:00:00Z\"\n    }\n  ],\n  \"totalElements\": 7,\n  \"totalPages\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /audit/events/type/:eventType — Events by Type (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/audit/events/type/ORDER_SUBMITTED?page=0&size=50",
+              "host": ["{{base_url}}"],
+              "path": ["audit", "events", "type", "ORDER_SUBMITTED"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            },
+            "description": "Returns all events of a specific type, paginated.\n\nCommon event types: `ORDER_SUBMITTED`, `COMPLIANCE_APPROVED`, `COMPLIANCE_REJECTED`, `FUNDS_HELD`, `FUNDS_RELEASED`, `ORDER_MATCHED`, `FUNDS_DEBITED`, `SETTLEMENT_CREATED`, `SETTLEMENT_COMPLETED`, `SAGA_COMPLETED`, `SAGA_FAILED`"
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/audit/events/type/ORDER_SUBMITTED?page=0&size=50" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"content\": [\n    {\n      \"id\": \"h8000000-0000-0000-0000-000000000001\",\n      \"eventType\": \"ORDER_SUBMITTED\",\n      \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"sourceService\": \"order-service\",\n      \"payload\": \"{\\\"ticker\\\":\\\"AAPL\\\",\\\"side\\\":\\\"BUY\\\",\\\"type\\\":\\\"MARKET\\\",\\\"quantity\\\":10}\",\n      \"kafkaTopic\": \"order-events\",\n      \"kafkaOffset\": 1024,\n      \"createdAt\": \"2024-03-17T17:00:00Z\"\n    }\n  ],\n  \"totalElements\": 1,\n  \"totalPages\": 1\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /audit/events/range — Events by Time Range (paginated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/audit/events/range?from=2024-03-17T00:00:00Z&to=2024-03-17T23:59:59Z&page=0&size=50",
+              "host": ["{{base_url}}"],
+              "path": ["audit", "events", "range"],
+              "query": [
+                { "key": "from", "value": "2024-03-17T00:00:00Z", "description": "ISO-8601 start datetime (inclusive)" },
+                { "key": "to", "value": "2024-03-17T23:59:59Z", "description": "ISO-8601 end datetime (inclusive)" },
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "50" }
+              ]
+            },
+            "description": "Returns all audit events that occurred within the specified time window. Both `from` and `to` are required and must be ISO-8601 instants (e.g., `2024-03-17T00:00:00Z`)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/audit/events/range?from=2024-03-17T00:00:00Z&to=2024-03-17T23:59:59Z" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"content\": [\n    {\n      \"id\": \"h8000000-0000-0000-0000-000000000001\",\n      \"eventType\": \"ORDER_SUBMITTED\",\n      \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"sourceService\": \"order-service\",\n      \"createdAt\": \"2024-03-17T17:00:00Z\"\n    }\n  ],\n  \"totalElements\": 7,\n  \"totalPages\": 1\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09 - Saga Orchestrator",
+      "description": "Distributed saga orchestration for order workflows. Port 8088, routed via gateway at /saga/**.\n\nSaga statuses: STARTED → COMPLETED / COMPENSATING → FAILED\n\nA saga is automatically created for every submitted order and coordinates the steps: compliance → hold → match → debit → settlement.",
+      "item": [
+        {
+          "name": "GET /saga/active — Get Active Sagas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/saga/active",
+              "host": ["{{base_url}}"],
+              "path": ["saga", "active"]
+            },
+            "description": "Returns all sagas currently in STARTED status (in-flight orders)."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/saga/active" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"c3000000-0000-0000-0000-000000000002\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000002\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"status\": \"STARTED\",\n    \"currentStep\": 2,\n    \"failureReason\": null,\n    \"startedAt\": \"2024-03-17T17:10:00Z\",\n    \"completedAt\": null,\n    \"steps\": []\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "GET /saga/:sagaId — Get Saga by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/saga/{{saga_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["saga", "{{saga_id}}"]
+            },
+            "description": "Returns a single saga by its UUID, including all saga steps with their individual statuses."
+          },
+          "response": [
+            {
+              "name": "200 OK — completed saga",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/saga/c3000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"COMPLETED\",\n  \"currentStep\": 5,\n  \"failureReason\": null,\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:05Z\",\n  \"steps\": [\n    { \"stepNumber\": 1, \"stepName\": \"COMPLIANCE_CHECK\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:01Z\" },\n    { \"stepNumber\": 2, \"stepName\": \"HOLD_FUNDS\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:02Z\" },\n    { \"stepNumber\": 3, \"stepName\": \"MATCH_ORDER\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:03Z\" },\n    { \"stepNumber\": 4, \"stepName\": \"DEBIT_FUNDS\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:04Z\" },\n    { \"stepNumber\": 5, \"stepName\": \"CREATE_SETTLEMENT\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:05Z\" }\n  ]\n}"
+            },
+            {
+              "name": "200 OK — failed saga (with compensation)",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/saga/c3000000-0000-0000-0000-000000000099" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000099\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"FAILED\",\n  \"currentStep\": 1,\n  \"failureReason\": \"Compliance check failed: INSUFFICIENT_FUNDS\",\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:01Z\",\n  \"steps\": [\n    { \"stepNumber\": 1, \"stepName\": \"COMPLIANCE_CHECK\", \"status\": \"FAILED\", \"errorMessage\": \"INSUFFICIENT_FUNDS\", \"executedAt\": \"2024-03-17T17:00:01Z\" }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /saga/order/:orderId — Get Saga by Order ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/saga/order/{{order_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["saga", "order", "{{order_id}}"]
+            },
+            "description": "Looks up the saga that was created for a given order. Each order has exactly one saga."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/saga/order/b2000000-0000-0000-0000-000000000001" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"COMPLETED\",\n  \"currentStep\": 5,\n  \"failureReason\": null,\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:05Z\",\n  \"steps\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /saga/status/:status — Get Sagas by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/saga/status/COMPLETED",
+              "host": ["{{base_url}}"],
+              "path": ["saga", "status", "COMPLETED"]
+            },
+            "description": "Returns all sagas with the given status.\n\nValid statuses: `STARTED`, `COMPLETED`, `COMPENSATING`, `FAILED`"
+          },
+          "response": [
+            {
+              "name": "200 OK — COMPLETED sagas",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/saga/status/COMPLETED" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "[\n  {\n    \"id\": \"c3000000-0000-0000-0000-000000000001\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"status\": \"COMPLETED\",\n    \"currentStep\": 5,\n    \"failureReason\": null,\n    \"startedAt\": \"2024-03-17T17:00:00Z\",\n    \"completedAt\": \"2024-03-17T17:00:05Z\",\n    \"steps\": []\n  }\n]"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Chaos Engineering (Surge Simulator)",
+      "description": "Chaos injection for resilience testing. Port 8089, routed via gateway at /admin/chaos/**.\n\n**Modes:**\n- `NETWORK_LATENCY` — adds artificial delay to every request processed by the service (latencyMs: 0–30000)\n- `DB_FAILURE` — randomly fails database operations at the specified rate (failureRatePercent: 0–100)\n- `BOTH` — applies both effects simultaneously\n\n**Important:** Only one chaos session can be active at a time.",
+      "item": [
+        {
+          "name": "POST /admin/chaos/start — Start Chaos Injection",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"triggeredBy\": \"regulator1\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/admin/chaos/start",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "chaos", "start"]
+            },
+            "description": "Starts a chaos injection session.\n\n**Validation:**\n- `mode`: required — NETWORK_LATENCY, DB_FAILURE, or BOTH\n- `latencyMs`: 0–30000 (milliseconds). Relevant for NETWORK_LATENCY and BOTH modes.\n- `failureRatePercent`: 0–100. Relevant for DB_FAILURE and BOTH modes.\n- `triggeredBy`: optional, who triggered this session (for audit purposes)"
+          },
+          "response": [
+            {
+              "name": "200 OK — NETWORK_LATENCY started",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"triggeredBy\": \"regulator1\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/admin/chaos/start" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000001\",\n  \"active\": true,\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
+            },
+            {
+              "name": "200 OK — DB_FAILURE at 30%",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"DB_FAILURE\",\n  \"latencyMs\": 0,\n  \"failureRatePercent\": 30,\n  \"triggeredBy\": \"regulator1\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/admin/chaos/start" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000002\",\n  \"active\": true,\n  \"mode\": \"DB_FAILURE\",\n  \"latencyMs\": 0,\n  \"failureRatePercent\": 30,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
+            },
+            {
+              "name": "200 OK — BOTH modes",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"BOTH\",\n  \"latencyMs\": 5000,\n  \"failureRatePercent\": 50,\n  \"triggeredBy\": \"regulator1\"\n}"
+                },
+                "url": { "raw": "{{base_url}}/admin/chaos/start" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000003\",\n  \"active\": true,\n  \"mode\": \"BOTH\",\n  \"latencyMs\": 5000,\n  \"failureRatePercent\": 50,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /admin/chaos/stop — Stop Chaos Session",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/chaos/stop",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "chaos", "stop"]
+            },
+            "description": "Stops the currently active chaos session and returns the system to normal operation."
+          },
+          "response": [
+            {
+              "name": "200 OK — stopped",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/admin/chaos/stop" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000001\",\n  \"active\": false,\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
+            },
+            {
+              "name": "200 OK — no active session",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/admin/chaos/stop" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": null,\n  \"active\": false,\n  \"mode\": null,\n  \"latencyMs\": 0,\n  \"failureRatePercent\": 0,\n  \"startedAt\": null,\n  \"triggeredBy\": null\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /admin/chaos/status — Chaos Session Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/admin/chaos/status",
+              "host": ["{{base_url}}"],
+              "path": ["admin", "chaos", "status"]
+            },
+            "description": "Returns the current chaos session status. If no session is active, `active` will be false and other fields will be null/zero."
+          },
+          "response": [
+            {
+              "name": "200 OK — active session",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/admin/chaos/status" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000001\",\n  \"active\": true,\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
+            },
+            {
+              "name": "200 OK — no active session",
+              "originalRequest": {
+                "method": "GET",
+                "url": { "raw": "{{base_url}}/admin/chaos/status" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"sessionId\": null,\n  \"active\": false,\n  \"mode\": null,\n  \"latencyMs\": 0,\n  \"failureRatePercent\": 0,\n  \"startedAt\": null,\n  \"triggeredBy\": null\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 - Workflows",
+      "description": "Pre-built multi-step flows. Run 00 - Setup & Auth first. Each flow is self-contained — variables auto-propagate between steps via test scripts.",
+      "item": [
+        {
+          "name": "Flow A — Single User Trade Lifecycle (trader1)",
+          "description": "Complete BUY order from price check through to settlement. Run top-to-bottom. order_id and saga_id are captured automatically.",
+          "item": [
+            {
+              "name": "A1 — Check AAPL price",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/market/prices/AAPL", "host": ["{{base_url}}"], "path": ["market","prices","AAPL"] },
+                "description": "No auth needed. Note the currentPrice — the market BUY in A2 will fill near this value."
+              },
+              "response": []
+            },
+            {
+              "name": "A2 — Submit MARKET BUY (saves order_id)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "var j = pm.response.json();",
+                "if (j.id) { pm.collectionVariables.set('order_id', j.id); console.log('order_id:', j.id); }"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] },
+                "description": "Kicks off the saga: PENDING → COMPLIANCE_CHECK → OPEN → FILLED. order_id is auto-saved."
+              },
+              "response": []
+            },
+            {
+              "name": "A3 — Poll order status",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["orders","{{order_id}}"] },
+                "description": "Check status field. Should quickly reach FILLED. If stuck at COMPLIANCE_CHECK or OPEN, the saga is still in flight — wait a moment and retry."
+              },
+              "response": []
+            },
+            {
+              "name": "A4 — View saga for this order (saves saga_id)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "var j = pm.response.json();",
+                "if (j.id) { pm.collectionVariables.set('saga_id', j.id); console.log('saga_id:', j.id); }"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/saga/order/{{order_id}}", "host": ["{{base_url}}"], "path": ["saga","order","{{order_id}}"] },
+                "description": "Shows all saga steps with statuses. saga_id is auto-saved for use in A5."
+              },
+              "response": []
+            },
+            {
+              "name": "A5 — Full audit trail for this order",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/audit/events/order/{{order_id}}", "host": ["{{base_url}}"], "path": ["audit","events","order","{{order_id}}"] },
+                "description": "Chronological list of every event emitted for this order across all services."
+              },
+              "response": []
+            },
+            {
+              "name": "A6 — Check account balance",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/ledger/accounts/{{trader1_id}}", "host": ["{{base_url}}"], "path": ["ledger","accounts","{{trader1_id}}"] },
+                "description": "cashBalance should be reduced by the fill amount. availableCash should equal cashBalance (hold released after fill)."
+              },
+              "response": []
+            },
+            {
+              "name": "A7 — View positions",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/ledger/positions/{{trader1_id}}", "host": ["{{base_url}}"], "path": ["ledger","positions","{{trader1_id}}"] },
+                "description": "AAPL should now appear with quantity 10 and averageCost set to the fill price."
+              },
+              "response": []
+            },
+            {
+              "name": "A8 — Check pending settlements",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/settlement/pending", "host": ["{{base_url}}"], "path": ["settlement","pending"] },
+                "description": "The filled order should appear here with status PENDING_SETTLEMENT and settlementDate = T+1."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Flow B — Two-Trader Concurrent Orders",
+          "description": "trader1 and trader2 each submit orders independently, then you inspect both their accounts. Demonstrates multi-user isolation.",
+          "item": [
+            {
+              "name": "B1 — trader1 buys TSLA",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"TSLA\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 5\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] },
+                "description": "Uses trader1_token. Both traders start with $100,000."
+              },
+              "response": []
+            },
+            {
+              "name": "B2 — trader2 buys NVDA",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader2_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"NVDA\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 2\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] },
+                "description": "Uses trader2_token. Runs a separate saga concurrently with B1."
+              },
+              "response": []
+            },
+            {
+              "name": "B3 — trader1 account",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/ledger/accounts/{{trader1_id}}", "host": ["{{base_url}}"], "path": ["ledger","accounts","{{trader1_id}}"] }
+              },
+              "response": []
+            },
+            {
+              "name": "B4 — trader2 account",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader2_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/ledger/accounts/{{trader2_id}}", "host": ["{{base_url}}"], "path": ["ledger","accounts","{{trader2_id}}"] }
+              },
+              "response": []
+            },
+            {
+              "name": "B5 — trader1 positions",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/ledger/positions/{{trader1_id}}", "host": ["{{base_url}}"], "path": ["ledger","positions","{{trader1_id}}"] }
+              },
+              "response": []
+            },
+            {
+              "name": "B6 — trader2 positions",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader2_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/ledger/positions/{{trader2_id}}", "host": ["{{base_url}}"], "path": ["ledger","positions","{{trader2_id}}"] }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Flow C — Regulator Oversight",
+          "description": "Regulator inspects system state across all users. Uses regulator1_token throughout.",
+          "item": [
+            {
+              "name": "C1 — List all users",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/auth/users", "host": ["{{base_url}}"], "path": ["auth","users"] },
+                "description": "REGULATOR role required. Returns all registered users."
+              },
+              "response": []
+            },
+            {
+              "name": "C2 — All active sagas",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/saga/status/STARTED", "host": ["{{base_url}}"], "path": ["saga","status","STARTED"] },
+                "description": "In-flight orders. Empty list means all sagas have settled."
+              },
+              "response": []
+            },
+            {
+              "name": "C3 — trader1 compliance history",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/compliance/history/{{trader1_id}}", "host": ["{{base_url}}"], "path": ["compliance","history","{{trader1_id}}"] }
+              },
+              "response": []
+            },
+            {
+              "name": "C4 — All audit events (page 1)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/audit/events?page=0&size=50", "host": ["{{base_url}}"], "path": ["audit","events"], "query": [{ "key": "page", "value": "0" },{ "key": "size", "value": "50" }] }
+              },
+              "response": []
+            },
+            {
+              "name": "C5 — Pending settlements",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/settlement/pending", "host": ["{{base_url}}"], "path": ["settlement","pending"] }
+              },
+              "response": []
+            },
+            {
+              "name": "C6 — Trigger flash_crash scenario",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [],
+                "url": { "raw": "{{base_url}}/admin/market/scenarios/flash_crash/start", "host": ["{{base_url}}"], "path": ["admin","market","scenarios","flash_crash","start"] },
+                "description": "Starts a flash crash. All subsequent price ticks will simulate a sharp drop. Stop with C7."
+              },
+              "response": []
+            },
+            {
+              "name": "C7 — Stop active scenario",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{regulator1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [],
+                "url": { "raw": "{{base_url}}/admin/market/scenarios/stop", "host": ["{{base_url}}"], "path": ["admin","market","scenarios","stop"] }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Flow D — Chaos Engineering Test",
+          "description": "Inject network latency, submit an order while chaos is active, observe behaviour, then stop. Uses botoperator1_token for chaos endpoints.",
+          "item": [
+            {
+              "name": "D1 — Start chaos (2s latency)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{botoperator1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"triggeredBy\": \"bot-operator1\"\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/admin/chaos/start", "host": ["{{base_url}}"], "path": ["admin","chaos","start"] },
+                "description": "All subsequent requests to the surge-simulator will be delayed 2 seconds. Try submitting an order (D2) to see the effect."
+              },
+              "response": []
+            },
+            {
+              "name": "D2 — Submit order under chaos",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "var j = pm.response.json();",
+                "if (j.id) { pm.collectionVariables.set('order_id', j.id); }",
+                "console.log('Response time:', pm.response.responseTime + 'ms');"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"GOOGL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 3\n}", "options": { "raw": { "language": "json" } } },
+                "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] },
+                "description": "Submit while chaos is active. Check the Postman console — response time should reflect the injected latency."
+              },
+              "response": []
+            },
+            {
+              "name": "D3 — Check chaos status",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{botoperator1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/admin/chaos/status", "host": ["{{base_url}}"], "path": ["admin","chaos","status"] }
+              },
+              "response": []
+            },
+            {
+              "name": "D4 — Stop chaos",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{botoperator1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [],
+                "url": { "raw": "{{base_url}}/admin/chaos/stop", "host": ["{{base_url}}"], "path": ["admin","chaos","stop"] }
+              },
+              "response": []
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
