@@ -45,6 +45,10 @@ management:
       exposure:
         include: health,info
 
+market:
+  hours:
+    bypass: ${MARKET_HOURS_BYPASS:false}
+
 logging:
   level:
     com.equiflow: INFO

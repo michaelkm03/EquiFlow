@@ -1,5 +1,7 @@
 package com.equiflow.order.config;
 
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
@@ -7,6 +9,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
+@Slf4j
 @Component
 public class MarketHoursValidator {
 
@@ -14,7 +17,14 @@ public class MarketHoursValidator {
     private static final LocalTime MARKET_OPEN = LocalTime.of(9, 30);
     private static final LocalTime MARKET_CLOSE = LocalTime.of(16, 0);
 
+    @Value("${market.hours.bypass:false}")
+    private boolean bypass;
+
     public boolean isMarketOpen() {
+        if (bypass) {
+            log.debug("Market hours bypass enabled — treating market as open");
+            return true;
+        }
         ZonedDateTime now = ZonedDateTime.now(ET);
         DayOfWeek day = now.getDayOfWeek();
 
