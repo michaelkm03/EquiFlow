@@ -29,9 +29,6 @@
 11. [Settlement & Business Calendar](#11-settlement--business-calendar)
 12. [Testing Strategy](#12-testing-strategy)
 13. [Local Development Setup](#13-local-development-setup)
-14. [Non-Goals](#14-non-goals)
-15. [Failure Mode Matrix](#15-failure-mode-matrix)
-16. [Repository Structure](#16-repository-structure)
 
 ---
 
@@ -2072,102 +2069,6 @@ All 9 services + PostgreSQL + Redis + Kafka start together. Services auto-apply 
 ```bash
 docker-compose down -v   # removes all volumes (wipes DBs and Kafka)
 docker-compose up --build
-```
-
----
-
-## 14. Non-Goals
-
-- No frontend or trading UI
-- No cloud deployment (AWS, GCP, Azure) — local only
-- No CI/CD pipeline
-- No Kubernetes or Helm charts
-- No real brokerage or DTCC integration — fully simulated
-- No Mutual Funds or Bonds (planned for v2)
-- No GTC (Good Till Cancelled) orders — day orders only
-- No fractional shares
-- No short selling
-- No options, derivatives, or margin trading
-- No user registration — pre-seeded users only
-- No WebSocket / real-time push — REST polling only
-- No Slack notifications (planned for v2)
-
----
-
-## 15. Failure Mode Matrix
-
-| Failure | Detection | System Response | Recovery |
-|---|---|---|---|
-| **PostgreSQL Down** | Spring health check fails | Service returns `503` | Restart Docker container; `docker-compose restart postgres` |
-| **Kafka Down** | Producer ACK timeout | Saga step retried 3x; then `SAGA_FAILED` + compensate | `docker-compose restart kafka` |
-| **Token Expiry** | JWT `exp` claim check at Gateway | `401 Unauthorized` | Re-authenticate via `POST /auth/token` |
-| **Compliance Service Down** | Saga step timeout (30s) | `SAGA_FAILED` + compensate, order → `FAILED` | `docker-compose restart compliance-service` |
-| **Surge Simulator — Network Latency** | Intentional | Saga steps delayed; may timeout and compensate | `POST /admin/chaos/stop` |
-| **Surge Simulator — DB Failure** | Intentional (30% rate) | Writes retried; saga compensates on repeated failure | `POST /admin/chaos/stop` |
-| **Settlement Job Failure** | Job exception caught | Retry 3x; trades remain `PENDING_SETTLEMENT` | `POST /admin/settlement/run` |
-| **Market Data Service Down** | OpenFeign timeout | Market orders rejected with `503`; limit orders unaffected | `docker-compose restart market-data-service` |
-
----
-
-## 16. Repository Structure
-
-```
-equiflow/
-│
-├── auth-service/
-│   ├── src/main/java/com/equiflow/auth/
-│   ├── src/main/resources/
-│   │   ├── application.yml
-│   │   └── db/migration/          # Flyway scripts
-│   └── pom.xml
-│
-├── order-service/
-│   ├── src/main/java/com/equiflow/order/
-│   │   ├── controller/
-│   │   ├── service/
-│   │   ├── matching/              # Matching engine (internal)
-│   │   ├── repository/
-│   │   └── model/
-│   └── pom.xml
-│
-├── market-data-service/
-│   ├── src/main/resources/
-│   │   └── scenarios.yml
-│   └── pom.xml
-│
-├── compliance-service/
-├── ledger-service/
-├── settlement-service/
-├── audit-service/
-├── saga-orchestrator/
-├── surge-simulator/
-│
-├── infra/
-│   ├── docker-compose.yml
-│   ├── docker-compose.override.yml  # local port/volume overrides
-│   └── init-db/
-│       └── 01-create-databases.sql  # creates all 9 logical DBs
-│
-├── tests/
-│   ├── e2e/                       # Playwright tests
-│   │   ├── package.json
-│   │   ├── playwright.config.ts
-│   │   └── tests/
-│   └── performance/               # JMeter scripts
-│       └── equiflow-load-test.jmx
-│
-├── docs/
-│   └── SPEC.md                    # This document
-│
-├── .vscode/
-│   ├── tasks.json
-│   └── extensions.json
-│
-├── .env                           # Local secrets (gitignored)
-├── .env.example                   # Template with placeholder values
-├── .gitignore
-├── pom.xml                        # Parent POM (multi-module Maven)
-└── README.md                      # Quickstart + architecture diagram
 ```
 
 ---

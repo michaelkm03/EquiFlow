@@ -116,15 +116,22 @@ Open Swagger UI: **http://localhost:8080/swagger-ui.html**
 
 ---
 
-## Default Users
+## Seed Data
 
-Pre-seeded at startup — no registration required.
+All data is seeded automatically by Flyway on first boot — no manual setup required.
 
-| Username | Password | Role | Access |
+**Users** (all passwords: `password123`):
+
+| Username | Role | Ledger Account | UUID |
 |---|---|---|---|
-| `trader1` | `password123` | TRADER | Submit orders, view own portfolio |
-| `regulator1` | `password123` | REGULATOR | Read-only audit log, all orders |
-| `bot-operator1` | `password123` | BOT_OPERATOR | Admin APIs, chaos, market scenarios |
+| `trader1` | TRADER | $100,000 cash | `a1000000-0000-0000-0000-000000000001` |
+| `trader2` | TRADER | $100,000 cash | `a1000000-0000-0000-0000-000000000004` |
+| `regulator1` | REGULATOR | none | `a1000000-0000-0000-0000-000000000002` |
+| `bot-operator1` | BOT_OPERATOR | none | `a1000000-0000-0000-0000-000000000003` |
+
+**Market data:** 30 tickers pre-seeded with realistic baseline prices (AAPL, MSFT, TSLA, NVDA, GOOGL, AMZN and 24 more).
+
+**Everything else** (orders, compliance checks, sagas, audit events, settlements) starts empty and is populated as you make API calls.
 
 ### Get a token
 ```bash
@@ -132,6 +139,36 @@ curl -X POST http://localhost:8080/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username": "trader1", "password": "password123"}'
 ```
+
+---
+
+## Postman Collection
+
+A fully documented Postman collection is included at [`equiflow-postman-collection.json`](equiflow-postman-collection.json).
+
+**Import:** Postman → File → Import → select the file.
+
+**Folders:**
+
+| Folder | Contents |
+|---|---|
+| `00 - Setup & Auth` | Login requests for each user — run these first to populate tokens |
+| `01–10` — service folders | Every endpoint with example request bodies and responses |
+| `11 - Workflows` | Pre-built flows: single trade lifecycle, regulator oversight, chaos test |
+
+**Collection variables** auto-populated by the setup folder:
+
+| Variable | Description |
+|---|---|
+| `base_url` | `http://localhost:8080` (edit to change environment) |
+| `trader1_token` | JWT for trader1, auto-saved by setup login |
+| `trader2_token` | JWT for trader2, auto-saved by setup login |
+| `regulator1_token` | JWT for regulator1, auto-saved by setup login |
+| `botoperator1_token` | JWT for bot-operator1, auto-saved by setup login |
+| `order_id` | Auto-saved when you POST a new order |
+| `saga_id` | Auto-saved when you look up a saga |
+
+**Quick start:** run folder `00 - Setup & Auth` top-to-bottom (4 requests), then use any workflow or individual endpoint.
 
 ---
 
@@ -215,11 +252,11 @@ BOT_TOKEN=$(curl -s -X POST http://localhost:8080/auth/token \
   -H "Content-Type: application/json" \
   -d '{"username":"bot-operator1","password":"password123"}' | jq -r .token)
 
-# Start chaos (network latency + DB failures for 60 seconds)
+# Start chaos (network latency + 30% DB failure rate)
 curl -X POST http://localhost:8080/admin/chaos/start \
   -H "Authorization: Bearer $BOT_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"mode":"BOTH","latencyMs":2000,"dbFailureRate":0.30,"durationSeconds":60}'
+  -d '{"mode":"BOTH","latencyMs":2000,"failureRatePercent":30,"triggeredBy":"bot-operator1"}'
 
 # Check status
 curl http://localhost:8080/admin/chaos/status \
@@ -235,15 +272,15 @@ curl -X POST http://localhost:8080/admin/chaos/stop \
 ## Market Scenarios
 
 ```bash
-# Trigger a flash crash on AAPL
-curl -X POST http://localhost:8080/admin/market/scenario/flash-crash \
+# Trigger a flash crash
+curl -X POST http://localhost:8080/admin/market/scenarios/flash_crash/start \
   -H "Authorization: Bearer $BOT_TOKEN"
 
-# Available scenarios: flash-crash, bull-surge, volatility-spike,
-#                      market-open-pump, single-ticker-halt, sector-rotation
+# Available scenarios: flash_crash, bull_run, bear_market,
+#                      high_volatility, sector_rotation, liquidity_crisis
 
 # Stop active scenario
-curl -X POST http://localhost:8080/admin/market/scenario/stop \
+curl -X POST http://localhost:8080/admin/market/scenarios/stop \
   -H "Authorization: Bearer $BOT_TOKEN"
 ```
 
