@@ -9,3 +9,4 @@ public class AuditServiceApplication {
         SpringApplication.run(AuditServiceApplication.class, args);
     }
 }
+

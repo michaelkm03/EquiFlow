@@ -8,10 +8,6 @@
             "default": true
         }
     ],
-    "java.test.config": {
-        "vmArgs": [
-            "--enable-preview"
-        ]
-    },
-    "java.test.defaultConfig": "default"
+    "java.test.defaultConfig": "default",
+    "java.compile.nullAnalysis.mode": "automatic"
 }

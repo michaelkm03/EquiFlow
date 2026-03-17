@@ -30,7 +30,6 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false)
-    @Convert(converter = RoleConverter.class)
     private Role role;
 
     @Column(name = "created_at", nullable = false, updatable = false)

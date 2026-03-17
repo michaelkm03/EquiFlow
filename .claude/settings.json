@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.tealhq.com)",
+      "WebFetch(domain:getsdeready.com)"
+    ]
+  }
+}
