@@ -1,7 +1,7 @@
 # EquiFlow — Product & Engineering Backlog
 **Version:** 1.2
 **Status:** Approved
-**Product Owner:** Michael Montgomery
+**Product Owner:** Claude
 **Engineering Lead:** Michael Montgomery
 **Last Updated:** 2026-03-17
 
@@ -11,7 +11,7 @@
 
 | Role | Name | Date |
 |------|------|------|
-| Product Owner | Michael Montgomery | 2026-03-17 |
+| Product Owner | Claude | 2026-03-17 |
 | Engineering Lead | Michael Montgomery | 2026-03-17 |
 
 > Stories in **Sprint 1** are approved and scheduled. Stories in the **Backlog**
@@ -23,15 +23,15 @@
 
 ## Table of Contents
 
-### Sprint 1 — Features
+### Sprint 1 — Product Features
 | Ticket | Feature | Points | Priority |
 |--------|---------|--------|----------|
-| [EQ-101](#eq-101--stop-loss-order-type) | Stop-Loss Order Type — passive trigger order that converts to market on price threshold | 5 | P0 |
-| [EQ-102](#eq-102--order-history--filtering-and-pagination) | Order History Filtering & Pagination — date, status, and ticker filters with paged results | 3 | P0 |
-| [EQ-103](#eq-103--portfolio-pl-summary-endpoint) | Portfolio P&L Summary — unrealized gain/loss per position with aggregate totals | 5 | P1 |
-| [EQ-104](#eq-104--price-alerts--notify-when-target-price-is-hit) | Price Alerts — notify user when a ticker crosses a configured target price | 5 | P1 |
+| [EQ-101](#eq-101--stop-loss-order-type) | Stop-Loss Order Type — automatically sell a stock if its price drops to a level the user sets | 5 | P0 |
+| [EQ-102](#eq-102--order-history--filtering-and-pagination) | Order History Filtering & Pagination — search and page through past orders instead of getting one giant list | 3 | P0 |
+| [EQ-103](#eq-103--portfolio-pl-summary-endpoint) | Portfolio P&L Summary — show users how much money they've made or lost across all their holdings | 5 | P1 |
+| [EQ-104](#eq-104--price-alerts--notify-when-target-price-is-hit) | Price Alerts — let users set a target price on a stock and get notified when it hits that price | 5 | P1 |
 
-### Sprint 1 — Engineering
+### Sprint 1 — Infrastructure and Tech Debt
 | Ticket | Task | Points | Priority |
 |--------|------|--------|----------|
 | [EQ-110](#eq-110--ci-pipeline-github-actions) | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
@@ -42,9 +42,9 @@
 ### Backlog — Features
 | Ticket | Feature | Points |
 |--------|---------|--------|
-| [EQ-201](#eq-201--trade-confirmation-documents) | Trade Confirmation Documents — on-demand confirmation for filled orders | 5 |
-| [EQ-202](#eq-202--account-funding--deposit-and-withdrawal) | Account Funding — deposit and withdrawal with ledger entries and Kafka events | 8 |
-| [EQ-203](#eq-203--wash-sale-compliance--user-facing-warning) | Wash-Sale User Warning — enrich rejection with reason, expiry, and triggering order | 3 |
+| [EQ-201](#eq-201--trade-confirmation-documents) | Trade Confirmation Documents — generate a receipt for every completed trade | 5 |
+| [EQ-202](#eq-202--account-funding--deposit-and-withdrawal) | Account Funding — let users add or withdraw money from their account | 8 |
+| [EQ-203](#eq-203--wash-sale-compliance--user-facing-warning) | Wash-Sale User Warning — when a trade is blocked by tax rules, explain why and when the user can try again | 3 |
 
 ---
 
