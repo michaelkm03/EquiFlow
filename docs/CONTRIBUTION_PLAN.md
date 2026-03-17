@@ -23,28 +23,30 @@
 
 ## Table of Contents
 
+⚪ Not Started &nbsp; 🔵 In Progress &nbsp; ✅ Done
+
 ### Sprint 1 — Product Features
-| Ticket | Feature | Points | Priority |
-|--------|---------|--------|----------|
-| [EQ-101](#eq-101--stop-loss-order-type) | Stop-Loss Order Type — automatically sell a stock if its price drops to a level the user sets | 5 | P0 |
-| [EQ-102](#eq-102--order-history--filtering-and-pagination) | Order History Filtering & Pagination — search and page through past orders instead of getting one giant list | 3 | P0 |
-| [EQ-103](#eq-103--portfolio-pl-summary-endpoint) | Portfolio P&L Summary — show users how much money they've made or lost across all their holdings | 5 | P1 |
-| [EQ-104](#eq-104--price-alerts--notify-when-target-price-is-hit) | Price Alerts — let users set a target price on a stock and get notified when it hits that price | 5 | P1 |
+| Status | Ticket | Feature | Points | Priority |
+|--------|--------|---------|--------|----------|
+| ⚪ | <nobr>[EQ-101](#eq-101--stop-loss-order-type)</nobr> | Stop-Loss Order Type — automatically sell a stock if its price drops to a level the user sets | 5 | P0 |
+| ⚪ | <nobr>[EQ-102](#eq-102--order-history--filtering-and-pagination)</nobr> | Order History Filtering & Pagination — search and page through past orders instead of getting one giant list | 3 | P0 |
+| ⚪ | <nobr>[EQ-103](#eq-103--portfolio-pl-summary-endpoint)</nobr> | Portfolio P&L Summary — show users how much money they've made or lost across all their holdings | 5 | P1 |
+| ⚪ | <nobr>[EQ-104](#eq-104--price-alerts--notify-when-target-price-is-hit)</nobr> | Price Alerts — let users set a target price on a stock and get notified when it hits that price | 5 | P1 |
 
 ### Sprint 1 — Infrastructure and Tech Debt
-| Ticket | Task | Points | Priority |
-|--------|------|--------|----------|
-| [EQ-110](#eq-110--ci-pipeline-github-actions) | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
-| [EQ-111](#eq-111--fix-java-version-mismatch) | Fix Java Version Mismatch — align pom.xml and README to Java 21 | 1 | P0 |
-| [EQ-112](#eq-112--ledgerservice-test-coverage) | LedgerService Test Coverage — hold, debit, release, concurrency paths | 5 | P0 |
-| [EQ-113](#eq-113--saga-compensation--rollback) | Saga Compensation — rollback ledger and order on saga failure | 8 | P0 |
+| Status | Ticket | Task | Points | Priority |
+|--------|--------|------|--------|----------|
+| ⚪ | <nobr>[EQ-110](#eq-110--ci-pipeline-github-actions)</nobr> | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
+| ⚪ | <nobr>[EQ-111](#eq-111--fix-java-version-mismatch)</nobr> | Fix Java Version Mismatch — align pom.xml and README to Java 21 | 1 | P0 |
+| ⚪ | <nobr>[EQ-112](#eq-112--ledgerservice-test-coverage)</nobr> | LedgerService Test Coverage — hold, debit, release, concurrency paths | 5 | P0 |
+| ⚪ | <nobr>[EQ-113](#eq-113--saga-compensation--rollback)</nobr> | Saga Compensation — rollback ledger and order on saga failure | 8 | P0 |
 
 ### Backlog — Features
-| Ticket | Feature | Points |
-|--------|---------|--------|
-| [EQ-201](#eq-201--trade-confirmation-documents) | Trade Confirmation Documents — generate a receipt for every completed trade | 5 |
-| [EQ-202](#eq-202--account-funding--deposit-and-withdrawal) | Account Funding — let users add or withdraw money from their account | 8 |
-| [EQ-203](#eq-203--wash-sale-compliance--user-facing-warning) | Wash-Sale User Warning — when a trade is blocked by tax rules, explain why and when the user can try again | 3 |
+| Status | Ticket | Feature | Points |
+|--------|--------|---------|--------|
+| ⚪ | <nobr>[EQ-201](#eq-201--trade-confirmation-documents)</nobr> | Trade Confirmation Documents — generate a receipt for every completed trade | 5 |
+| ⚪ | <nobr>[EQ-202](#eq-202--account-funding--deposit-and-withdrawal)</nobr> | Account Funding — let users add or withdraw money from their account | 8 |
+| ⚪ | <nobr>[EQ-203](#eq-203--wash-sale-compliance--user-facing-warning)</nobr> | Wash-Sale User Warning — when a trade is blocked by tax rules, explain why and when the user can try again | 3 |
 
 ---
 
