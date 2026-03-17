@@ -21,6 +21,33 @@
 
 ---
 
+## Table of Contents
+
+### Sprint 1 — Features
+| Ticket | Feature | Points | Priority |
+|--------|---------|--------|----------|
+| [EQ-101](#eq-101--stop-loss-order-type) | Stop-Loss Order Type — passive trigger order that converts to market on price threshold | 5 | P0 |
+| [EQ-102](#eq-102--order-history--filtering-and-pagination) | Order History Filtering & Pagination — date, status, and ticker filters with paged results | 3 | P0 |
+| [EQ-103](#eq-103--portfolio-pl-summary-endpoint) | Portfolio P&L Summary — unrealized gain/loss per position with aggregate totals | 5 | P1 |
+| [EQ-104](#eq-104--price-alerts--notify-when-target-price-is-hit) | Price Alerts — notify user when a ticker crosses a configured target price | 5 | P1 |
+
+### Sprint 1 — Engineering
+| Ticket | Task | Points | Priority |
+|--------|------|--------|----------|
+| [EQ-110](#eq-110--ci-pipeline-github-actions) | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
+| [EQ-111](#eq-111--fix-java-version-mismatch) | Fix Java Version Mismatch — align pom.xml and README to Java 21 | 1 | P0 |
+| [EQ-112](#eq-112--ledgerservice-test-coverage) | LedgerService Test Coverage — hold, debit, release, concurrency paths | 5 | P0 |
+| [EQ-113](#eq-113--saga-compensation--rollback) | Saga Compensation — rollback ledger and order on saga failure | 8 | P0 |
+
+### Backlog — Features
+| Ticket | Feature | Points |
+|--------|---------|--------|
+| [EQ-201](#eq-201--trade-confirmation-documents) | Trade Confirmation Documents — on-demand confirmation for filled orders | 5 |
+| [EQ-202](#eq-202--account-funding--deposit-and-withdrawal) | Account Funding — deposit and withdrawal with ledger entries and Kafka events | 8 |
+| [EQ-203](#eq-203--wash-sale-compliance--user-facing-warning) | Wash-Sale User Warning — enrich rejection with reason, expiry, and triggering order | 3 |
+
+---
+
 ## Story Point Scale
 
 | Points | Effort |
