@@ -1,196 +1,277 @@
-# EquiFlow — SE Contribution Plan
-
-This document tracks planned contributions to demonstrate software engineering
-ability across testing, architecture, CI/CD, and code quality.
-
----
-
-## Required (Must-Do — Core SE Signal)
-
-### 1. Fix Dead Test in OrderService
-**File:** `order-service/src/test/java/com/equiflow/order/OrderServiceTest.java`
-
-`testMarketHoursValidatorWeekend()` currently asserts `result || !result` — a
-tautology that always passes and tests nothing. Rewrite it to assert that an
-order submitted on a Saturday or Sunday is rejected with the appropriate error.
-
-**Why it matters:** This is the first thing any senior engineer reviewer flags.
-A no-op test is worse than no test — it gives false confidence.
-
-**Tasks:**
-- [ ] Set test clock to a Saturday datetime
-- [ ] Submit a market order
-- [ ] Assert response is an error / exception with a message referencing market hours
-- [ ] Repeat for Sunday
+# EquiFlow — Product & Engineering Backlog
+**Version:** 1.1
+**Status:** Approved
+**Product Owner:** Michael Montgomery
+**Engineering Lead:** Michael Montgomery
+**Last Updated:** 2026-03-16
 
 ---
 
-### 2. Write Tests for LedgerService
-**File:** `ledger-service/src/test/java/com/equiflow/ledger/` *(create)*
+## Sign-Off
 
-Zero tests exist for the highest-risk service in the system — the one
-responsible for `SELECT FOR UPDATE` financial debit/hold logic. This is the
-most important gap in the repo.
+| Role | Name | Date |
+|------|------|------|
+| Product Owner | Michael Montgomery | 2026-03-16 |
+| Engineering Lead | Michael Montgomery | 2026-03-16 |
 
-**Tasks:**
-- [ ] Unit test: successful hold reduces available balance
-- [ ] Unit test: debit below zero throws InsufficientFundsException
-- [ ] Unit test: releasing a hold restores available balance
-- [ ] Integration test (`@SpringBootTest`): concurrent debit on same account
-  serializes correctly (two threads, one should fail or block)
-- [ ] Integration test: hold → debit → verify final balance is correct
+> Stories in **Sprint 1** are approved and scheduled. Stories in the **Backlog**
+> are approved by product and engineering but not yet assigned to a sprint.
+> All feature stories have been reviewed for technical feasibility by the
+> engineering lead.
 
 ---
 
-### 3. Write Integration Tests for OrderService
-**File:** `order-service/src/test/java/com/equiflow/order/OrderServiceIntegrationTest.java` *(create)*
+## Story Point Scale
 
-Use `@SpringBootTest` with H2 (in-memory) or Testcontainers (PostgreSQL) to
-test the full order submission flow end-to-end within the service boundary.
-
-**Tasks:**
-- [ ] Market order success — assert order persisted with PENDING status
-- [ ] Limit order placement — assert price and quantity stored correctly
-- [ ] Order cancellation — assert status transitions to CANCELLED
-- [ ] NYSE hours rejection — assert orders outside market hours are rejected
-- [ ] Duplicate order ID handling
+| Points | Effort |
+|--------|--------|
+| 1 | Trivial — under 1 hour |
+| 2 | Small — half a day |
+| 3 | Medium — 1 day |
+| 5 | Large — 2–3 days |
+| 8 | X-Large — 1 week |
 
 ---
 
-### 4. Implement Saga Compensation / Rollback
-**File:** `saga-orchestrator/src/main/java/com/equiflow/saga/OrderSaga.java`
-
-`failSaga()` currently only logs and marks the saga FAILED. It does not
-compensate — no ledger hold is released, no partial compliance result is voided,
-no order is cancelled. This breaks the fundamental guarantee of the saga pattern.
-
-**Tasks:**
-- [ ] Add `releaseHold()` compensation call to LedgerService if debit step
-  was reached before failure
-- [ ] Add `cancelOrder()` compensation call to OrderService on failure
-- [ ] Add a `compensate()` method that executes cleanup steps in reverse order
-- [ ] Write a test that fails the saga mid-way and asserts compensation ran
+## Sprint 1 — Core Platform Hardening
+**Sprint Goal:** Stabilize the trading engine's financial core, establish CI,
+and ship the stop-loss order type requested by early users.
 
 ---
 
-### 5. Add GitHub Actions CI Pipeline
-**File:** `.github/workflows/ci.yml` *(create)*
+### EQ-101 · Stop-Loss Order Type
+**Epic:** Order Management
+**Type:** Feature
+**Points:** 5
+**Priority:** P0
 
-No automated build or test exists on any push or PR. This is the single most
-visible SE signal to any engineer reviewing the repo.
+**Product Request:**
+> "Users are asking for downside protection. We need stop-loss orders so they
+> can set a trigger price and automatically exit a position if it drops to that
+> level. This is table stakes for any retail trading platform."
+> — Product, 2026-03-10
 
-**Tasks:**
-- [ ] Create workflow triggered on `push` and `pull_request` to `master`
-- [ ] Step: checkout code
-- [ ] Step: set up Java 17 (or 21 — fix version mismatch first, see #6)
-- [ ] Step: `mvn --batch-mode test` across all modules
-- [ ] Step: publish test results as workflow artifact
-- [ ] (Optional) Add a badge to README
+**Background:**
+Currently the engine supports market and limit orders only. A stop-loss order
+sits as a passive order until the market price of a given ticker falls to or
+below a configured trigger price, at which point it converts to a market order
+and executes.
 
-```yaml
-# .github/workflows/ci.yml skeleton
-name: CI
-on: [push, pull_request]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - run: mvn --batch-mode test
-```
+**Acceptance Criteria:**
+- [ ] `POST /orders` accepts `"type": "STOP_LOSS"` with a `triggerPrice` field
+- [ ] Order is stored with status `PENDING_TRIGGER` and does not enter the matching engine immediately
+- [ ] `MarketDataService` price updates are evaluated against all open stop-loss orders
+- [ ] When market price ≤ `triggerPrice`, order converts to a market order and is submitted for execution
+- [ ] If trigger fires outside NYSE hours, order is queued for next market open
+- [ ] Triggered and filled stop-loss orders appear in order history with both trigger and fill prices
 
----
-
-### 6. Fix Java Version Discrepancy
-**Files:** `pom.xml`, `README.md`
-
-`pom.xml` declares `<java.version>17</java.version>` but the README and project
-description claim Java 21. Every engineer reviewing the repo will notice this.
-
-**Tasks:**
-- [ ] Decide on Java 21 (preferred — aligns with README and modern Spring Boot 3.x)
-- [ ] Update `pom.xml`: `<java.version>21</java.version>`
-- [ ] Update `<source>` and `<target>` compiler plugin settings if present
-- [ ] Verify the project builds and tests pass under Java 21
+**Files:**
+`order-service/`, `market-data-service/`
 
 ---
 
-## Nice to Have (Differentiators)
+### EQ-102 · Order History — Filtering and Pagination
+**Epic:** Order Management
+**Type:** Feature
+**Points:** 3
+**Priority:** P0
 
-### 7. Add Bean Validation to DTOs
-**Files:** Request DTO classes across all services
+**Product Request:**
+> "Right now users get a flat dump of every order they've ever placed. We need
+> date range filtering and pagination — the list is unusable once a user has
+> more than a few dozen orders."
+> — Product, 2026-03-08
 
-Replace manual null/range checks inside service methods with standard
-`@NotNull`, `@Valid`, `@Min`/`@Max` annotations on request DTOs. Spring Boot
-will enforce these automatically via `@Valid` on controller parameters.
+**Background:**
+`GET /orders` currently returns all orders for the authenticated user with no
+filtering or pagination. This needs to support date range, status, and ticker
+filtering with cursor-based or offset pagination.
 
-**Tasks:**
-- [ ] Add `jakarta.validation` annotations to OrderRequest, AccountRequest, etc.
-- [ ] Add `@Valid` to corresponding `@PostMapping` / `@PutMapping` controller args
-- [ ] Write a test asserting a 400 response when a required field is missing
+**Acceptance Criteria:**
+- [ ] `GET /orders` supports query params: `from`, `to` (ISO 8601 dates), `status`, `ticker`, `page`, `size`
+- [ ] Default page size is 25; max is 100
+- [ ] Response includes a `pagination` object with `totalElements`, `totalPages`, `currentPage`
+- [ ] Invalid date format returns HTTP 400 with a descriptive error
+- [ ] Filtering by `status=FILLED` returns only filled orders
 
----
-
-### 8. Write Wash-Sale Boundary Condition Tests
-**File:** `compliance-service/src/test/java/com/equiflow/compliance/`
-
-The wash-sale rule has a precise 30-day window. Boundary tests prove the
-implementation is correct at the edges, not just in the happy path.
-
-**Tasks:**
-- [ ] Test: sell today, buy tomorrow — assert BLOCKED
-- [ ] Test: sell 30 days ago, buy today — assert BLOCKED (within window)
-- [ ] Test: sell 31 days ago, buy today — assert ALLOWED
-- [ ] Test: sell and buy different ticker — assert ALLOWED
-
----
-
-### 9. Add JMeter or Gatling Performance Test
-**Directory:** `performance/` *(create)*
-
-The SPEC calls for 5,000 concurrent order tests. Even a committed test plan
-demonstrates performance engineering discipline.
-
-**Tasks:**
-- [ ] Create a JMeter `.jmx` test plan targeting the order submission endpoint
-- [ ] Configure thread group: 100 users, 50 orders each
-- [ ] Add latency assertions: p99 < 200ms
-- [ ] Add a README in `performance/` describing how to run it
-- [ ] (Optional) Add a Gatling Scala simulation as an alternative
+**Files:**
+`order-service/src/main/java/com/equiflow/order/`
 
 ---
 
-### 10. Persist OrderBook State Across Restarts
-**File:** `order-service/src/main/java/com/equiflow/order/OrderBook.java`
+### EQ-103 · Portfolio P&L Summary Endpoint
+**Epic:** Portfolio Analytics
+**Type:** Feature
+**Points:** 5
+**Priority:** P1
 
-The in-memory `TreeMap`-based order book is wiped on any service restart.
-Add serialization on shutdown and reload on startup, or document the tradeoff
-explicitly.
+**Product Request:**
+> "Users have no way to see whether they're up or down overall. We need a
+> portfolio summary — current value, total cost basis, and unrealized P&L per
+> position. This is the most-requested feature from beta users."
+> — Product, 2026-03-05
 
-**Tasks:**
-- [ ] Option A: Add `@PreDestroy` to serialize order book to Redis or DB,
-  `@PostConstruct` to reload
-- [ ] Option B: Add a prominent comment in `OrderBook.java` documenting the
-  deliberate tradeoff (simulation scope, not production)
-- [ ] Option B is acceptable for a portfolio project — just make it explicit
+**Background:**
+`LedgerService` tracks positions with weighted average cost basis per ticker.
+`MarketDataService` holds current prices. A new `/portfolio/summary` endpoint
+should join these to calculate unrealized P&L per position and in aggregate.
+
+**Acceptance Criteria:**
+- [ ] `GET /portfolio/summary` returns a list of open positions
+- [ ] Each position includes: `ticker`, `quantity`, `avgCostBasis`, `currentPrice`, `marketValue`, `unrealizedPnl`, `unrealizedPnlPct`
+- [ ] Response includes an aggregate: `totalCostBasis`, `totalMarketValue`, `totalUnrealizedPnl`
+- [ ] Current price is sourced from `MarketDataService` in real time
+- [ ] A position with zero quantity is excluded from the response
+
+**Files:**
+`ledger-service/`, `market-data-service/`
 
 ---
 
-## Summary Checklist
+### EQ-104 · Price Alerts — Notify When Target Price Is Hit
+**Epic:** Notifications
+**Type:** Feature
+**Points:** 5
+**Priority:** P1
 
-| # | Task | Type | Status |
-|---|------|------|--------|
-| 1 | Fix dead test in OrderServiceTest | Required | [ ] |
-| 2 | Write LedgerService tests | Required | [ ] |
-| 3 | Write OrderService integration tests | Required | [ ] |
-| 4 | Implement saga compensation/rollback | Required | [ ] |
-| 5 | Add GitHub Actions CI pipeline | Required | [ ] |
-| 6 | Fix Java 17 vs 21 version mismatch | Required | [ ] |
-| 7 | Add Bean Validation to DTOs | Nice to Have | [ ] |
-| 8 | Write wash-sale boundary tests | Nice to Have | [ ] |
-| 9 | Add JMeter/Gatling performance tests | Nice to Have | [ ] |
-| 10 | Persist OrderBook state or document tradeoff | Nice to Have | [ ] |
+**Product Request:**
+> "Users want to know when a stock hits their target price without having to
+> watch the screen all day. Add price alerts — let them set a target and get
+> notified when the price crosses it."
+> — Product, 2026-03-11
+
+**Background:**
+Users should be able to configure a price alert on any ticker. When
+`MarketDataService` records a price crossing the alert threshold, an event is
+published to Kafka and consumed by a new notification handler that logs or
+delivers the alert.
+
+**Acceptance Criteria:**
+- [ ] `POST /alerts` accepts `{ ticker, targetPrice, direction: "ABOVE" | "BELOW" }`
+- [ ] `GET /alerts` returns all active alerts for the authenticated user
+- [ ] `DELETE /alerts/{id}` cancels an alert
+- [ ] When market price crosses the threshold, a `price.alert.triggered` Kafka event is published
+- [ ] Triggered alert is marked `TRIGGERED` and excluded from future evaluations
+
+**Files:**
+`market-data-service/`, new `notification-service/` or alert handler within `market-data-service/`
+
+---
+
+## Platform Sprint 1 — Engineering
+**Sprint Goal:** Establish CI and fix correctness gaps before feature work ships.
+> These are internal engineering tasks. They are not user-facing but are
+> required for the team to ship features reliably.
+
+---
+
+### EQ-110 · CI Pipeline (GitHub Actions)
+**Epic:** Platform
+**Type:** Engineering
+**Points:** 2
+**Priority:** P0
+
+**Acceptance Criteria:**
+- [ ] Workflow triggers on `push` and `pull_request` to `master`
+- [ ] Pipeline runs `mvn --batch-mode test` across all modules on Java 21
+- [ ] A failing test causes the pipeline to report failure
+- [ ] README displays CI status badge
+
+**Files:** `.github/workflows/ci.yml` *(new)*
+
+---
+
+### EQ-111 · Fix Java Version Mismatch
+**Epic:** Platform
+**Type:** Engineering
+**Points:** 1
+**Priority:** P0 — blocks EQ-110
+
+**Acceptance Criteria:**
+- [ ] `pom.xml` declares Java 21; README updated to match
+- [ ] Build and all tests pass under Java 21 in CI
+
+---
+
+### EQ-112 · LedgerService Test Coverage
+**Epic:** Platform
+**Type:** Engineering
+**Points:** 5
+**Priority:** P0
+
+**Acceptance Criteria:**
+- [ ] Hold, debit, release, and insufficient funds paths all have coverage
+- [ ] Concurrent debit on the same account produces a consistent final balance
+- [ ] Coverage for `LedgerService` reaches ≥ 80%
+
+---
+
+### EQ-113 · Saga Compensation / Rollback
+**Epic:** Platform
+**Type:** Engineering
+**Points:** 8
+**Priority:** P0
+
+**Acceptance Criteria:**
+- [ ] `failSaga()` calls `releaseHold()` on `LedgerService` if debit step was reached
+- [ ] `failSaga()` calls `cancelOrder()` on `OrderService` if matching step was reached
+- [ ] Compensation steps are idempotent
+
+---
+
+## Backlog — Approved, Not Yet Scheduled
+
+---
+
+### EQ-201 · Trade Confirmation Documents
+**Epic:** Compliance & Reporting
+**Type:** Feature
+**Points:** 5
+
+**Product Request:**
+> "Regulatory requirement. Every executed trade needs a confirmation document
+> showing the user what was traded, at what price, and what fees were applied.
+> Must be available for download within 24 hours of the trade."
+
+**Acceptance Criteria:**
+- [ ] `GET /orders/{id}/confirmation` returns a structured confirmation for any `FILLED` order
+- [ ] Confirmation includes: order ID, ticker, type, quantity, fill price, timestamp, estimated fee
+- [ ] `AuditService` logs every confirmation access
+- [ ] Requesting a confirmation for a non-filled order returns HTTP 409
+
+
+---
+
+### EQ-202 · Account Funding — Deposit and Withdrawal
+**Epic:** Account Management
+**Type:** Feature
+**Points:** 8
+
+**Product Request:**
+> "Users can't do anything useful until they can fund their account. We need
+> deposit and withdrawal flows — even if the actual bank integration is mocked
+> for now, the API and ledger side must be fully implemented."
+
+**Acceptance Criteria:**
+- [ ] `POST /accounts/deposit` increases available balance and creates a ledger entry
+- [ ] `POST /accounts/withdraw` decreases available balance if sufficient funds exist
+- [ ] Withdrawal below available balance returns HTTP 422
+- [ ] All deposit and withdrawal events published to Kafka and logged by `AuditService`
+- [ ] Bank integration is stubbed/mocked; real ACH integration is out of scope for this story
+
+---
+
+### EQ-203 · Wash-Sale Compliance — User-Facing Warning
+**Epic:** Compliance & Reporting
+**Type:** Feature
+**Points:** 3
+
+**Product Request:**
+> "Right now wash-sale violations are silently blocked. Users don't understand
+> why their order was rejected. We need a clear explanation returned with the
+> rejection so users can make an informed decision."
+
+**Acceptance Criteria:**
+- [ ] Wash-sale rejection response includes a `complianceReason` field explaining the rule
+- [ ] Response includes `blockedUntil` date (30 days after the triggering sale)
+- [ ] The original sale that triggered the rule is referenced by order ID in the response
