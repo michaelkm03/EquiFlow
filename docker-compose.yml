@@ -101,8 +101,10 @@ services:
     environment:
       # Set to "true" to bypass NYSE market hours check (useful for local dev/testing after 4 PM ET)
       MARKET_HOURS_BYPASS: "true"
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5006"
     ports:
       - "8082:8082"
+      - "5006:5006"
     restart: unless-stopped
 
   market-data-service:

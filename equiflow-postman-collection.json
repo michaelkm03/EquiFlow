@@ -324,7 +324,7 @@
     },
     {
       "name": "02 - Orders",
-      "description": "Order submission, status, cancellation, and order book. Port 8082, routed via gateway at /orders/**.\n\nOrder lifecycle: PENDING → COMPLIANCE_CHECK → OPEN → FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED\n\nOrder sides: BUY, SELL\nOrder types: MARKET (no limitPrice needed), LIMIT (limitPrice required)",
+      "description": "Order submission, status, cancellation, and order book. Port 8082, routed via gateway at /orders/**.\n\nOrder lifecycle: PENDING → COMPLIANCE_CHECK → OPEN → FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED\nStop-loss lifecycle: PENDING_TRIGGER → (price trigger met) → TRIGGERED → saga → FILLED\n\nOrder sides: BUY, SELL\nOrder types:\n- MARKET: no limitPrice needed\n- LIMIT: limitPrice required\n- STOP_LOSS: triggerPrice required; held as PENDING_TRIGGER until market price ≤ triggerPrice, then executes as a market order",
       "item": [
         {
           "name": "POST /orders — Submit New Order (MARKET BUY)",
@@ -398,6 +398,40 @@
               "_postman_previewlanguage": "json",
               "header": [{ "key": "Content-Type", "value": "application/json" }],
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000002\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"TSLA\",\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"limitPrice\": 250.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:00Z\"\n}"
+            },
+            {
+              "name": "201 Created — STOP_LOSS order",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  { "key": "Content-Type", "value": "application/json" },
+                  { "key": "Authorization", "value": "Bearer {{token}}" }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"triggerPrice\": 150.00\n}"
+                },
+                "url": { "raw": "{{base_url}}/orders" }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000003\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"triggerPrice\": 150.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING_TRIGGER\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2026-03-18T17:00:00Z\",\n  \"expiresAt\": null,\n  \"updatedAt\": \"2026-03-18T17:00:00Z\"\n}"
+            },
+            {
+              "name": "400 Bad Request — STOP_LOSS missing triggerPrice",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10\n}" },
+                "url": { "raw": "{{base_url}}/orders" }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"Bad Request\",\n  \"message\": \"Trigger price is required for STOP_LOSS orders\",\n  \"timestamp\": \"2026-03-18T17:00:00Z\",\n  \"path\": \"uri=/orders\",\n  \"service\": \"order-service\"\n}"
             },
             {
               "name": "400 Bad Request — missing required field",

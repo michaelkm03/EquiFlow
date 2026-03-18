@@ -37,4 +37,8 @@ public class OrderRequest {
     @Positive(message = "Limit price must be positive")
     @Schema(description = "Limit price (required for LIMIT orders)", example = "150.00")
     private BigDecimal limitPrice;
+
+    @DecimalMin(value = "0.01", message = "Trigger price must be positive")
+    @Schema(description = "Trigger price (required for STOP_LOSS orders)", example = "145.00")
+    private BigDecimal triggerPrice;
 }

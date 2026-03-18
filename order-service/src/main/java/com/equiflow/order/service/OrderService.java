@@ -56,6 +56,7 @@ public class OrderService {
                 .type(request.getType())
                 .quantity(request.getQuantity())
                 .limitPrice(request.getLimitPrice())
+                .triggerPrice(request.getTriggerPrice())
                 .status(OrderStatus.PENDING)
                 .expiresAt(request.getType() == OrderType.LIMIT
                         ? Instant.now().plus(1, ChronoUnit.DAYS)
@@ -66,7 +67,9 @@ public class OrderService {
         eventPublisher.publishOrderPlaced(order);
 
         // Execute immediately
-        if (request.getType() == OrderType.MARKET) {
+        if (request.getType() == OrderType.STOP_LOSS) {
+            return toResponse(order);
+        } else if (request.getType() == OrderType.MARKET) {
             order = matchingEngine.executeMarketOrder(order);
         } else {
             order = matchingEngine.executeLimitOrder(order);
