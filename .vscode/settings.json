@@ -9,5 +9,37 @@
         }
     ],
     "java.test.defaultConfig": "default",
-    "java.compile.nullAnalysis.mode": "automatic"
+    "java.compile.nullAnalysis.mode": "automatic",
+    "sqltools.connections": [
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "auth",
+            "username": "equiflow",
+            "database": "equiflow_auth"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "orders",
+            "database": "equiflow_orders",
+            "username": "equiflow"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "market",
+            "database": "equiflow_market",
+            "username": "equiflow"
+        }
+    ]
 }

@@ -197,8 +197,11 @@ services:
       redis:
         condition: service_started
     env_file: .env
+    environment:
+      JAVA_TOOL_OPTIONS: "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
     ports:
       - "8088:8088"
+      - "5005:5005"
     restart: unless-stopped
 
   surge-simulator:

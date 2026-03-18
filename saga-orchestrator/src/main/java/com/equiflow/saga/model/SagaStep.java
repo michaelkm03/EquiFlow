@@ -1,10 +1,13 @@
 package com.equiflow.saga.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -24,6 +27,9 @@ public class SagaStep {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "saga_id", nullable = false)
+    @JsonBackReference
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     private Saga saga;
 
     @Column(name = "step_number", nullable = false)
