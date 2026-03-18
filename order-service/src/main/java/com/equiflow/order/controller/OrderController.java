@@ -11,14 +11,18 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.bouncycastle.crypto.paddings.ISO7816d4Padding;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
 
@@ -60,16 +64,22 @@ public class OrderController {
         UUID userId = extractUserId(auth);
         return ResponseEntity.ok(orderService.getOrder(orderId, userId));
     }
-
+// from, to (ISO 8601 dates), status, ticker, page, size
     @GetMapping
     @Operation(summary = "List orders for authenticated user")
     public ResponseEntity<Page<OrderResponse>> listOrders(
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            @RequestParam(required = false) LocalDate from,
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String ticker,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "20") int size,
+            @RequestParam(defaultValue = "25") int size,
             Authentication auth) {
         UUID userId = extractUserId(auth);
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return ResponseEntity.ok(orderService.listOrders(userId, pageable));
+        return ResponseEntity.ok(orderService.listOrders(from, to, status, ticker, userId, pageable));
     }
 
     @DeleteMapping("/{orderId}")
