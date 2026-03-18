@@ -473,29 +473,85 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{base_url}}/orders?page=0&size=20",
+              "raw": "{{base_url}}/orders?page=0&size=25",
               "host": ["{{base_url}}"],
               "path": ["orders"],
               "query": [
+                { "key": "from", "value": "2026-01-01", "description": "Filter by createdAt >= date (YYYY-MM-DD, optional)", "disabled": true },
+                { "key": "to", "value": "2026-03-18", "description": "Filter by createdAt < date+1 (YYYY-MM-DD, optional)", "disabled": true },
+                { "key": "status", "value": "FILLED", "description": "Filter by order status — PENDING, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED (optional)", "disabled": true },
+                { "key": "ticker", "value": "AAPL", "description": "Filter by ticker symbol, case-insensitive (optional)", "disabled": true },
                 { "key": "page", "value": "0", "description": "Zero-based page index (default: 0)" },
-                { "key": "size", "value": "20", "description": "Page size (default: 20)" }
+                { "key": "size", "value": "25", "description": "Page size (default: 25)" }
               ]
             },
-            "description": "Returns a paginated list of orders belonging to the authenticated user, sorted by `createdAt` descending."
+            "description": "Returns a paginated list of orders belonging to the authenticated user, sorted by `createdAt` descending.\n\nAll filter params are optional and combinable:\n- `from` / `to`: ISO 8601 date range on `createdAt` (e.g. `2026-03-01`)\n- `status`: one of `PENDING`, `OPEN`, `PARTIALLY_FILLED`, `FILLED`, `CANCELLED`, `REJECTED`\n- `ticker`: stock symbol (e.g. `AAPL`)"
           },
           "response": [
             {
-              "name": "200 OK",
+              "name": "200 OK — no filters",
               "originalRequest": {
                 "method": "GET",
                 "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
-                "url": { "raw": "{{base_url}}/orders?page=0&size=20" }
+                "url": { "raw": "{{base_url}}/orders?page=0&size=25" }
               },
               "status": "OK",
               "code": 200,
               "_postman_previewlanguage": "json",
               "header": [{ "key": "Content-Type", "value": "application/json" }],
-              "body": "{\n  \"content\": [\n    {\n      \"id\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"ticker\": \"AAPL\",\n      \"side\": \"BUY\",\n      \"type\": \"MARKET\",\n      \"quantity\": 10,\n      \"limitPrice\": null,\n      \"filledPrice\": 172.35,\n      \"filledQty\": 10,\n      \"status\": \"FILLED\",\n      \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n      \"rejectionReason\": null,\n      \"createdAt\": \"2024-03-17T17:00:00Z\",\n      \"expiresAt\": \"2024-03-18T17:00:00Z\",\n      \"updatedAt\": \"2024-03-17T17:00:05Z\"\n    }\n  ],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 20,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 1,\n  \"totalPages\": 1,\n  \"last\": true,\n  \"first\": true\n}"
+              "body": "{\n  \"content\": [\n    {\n      \"id\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"ticker\": \"AAPL\",\n      \"side\": \"BUY\",\n      \"type\": \"MARKET\",\n      \"quantity\": 10,\n      \"limitPrice\": null,\n      \"filledPrice\": 172.35,\n      \"filledQty\": 10,\n      \"status\": \"FILLED\",\n      \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n      \"rejectionReason\": null,\n      \"createdAt\": \"2026-03-17T17:00:00Z\",\n      \"expiresAt\": null,\n      \"updatedAt\": \"2026-03-17T17:00:05Z\"\n    }\n  ],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 25,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 1,\n  \"totalPages\": 1,\n  \"last\": true,\n  \"first\": true\n}"
+            },
+            {
+              "name": "200 OK — filtered by status + ticker",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/orders?status=FILLED&ticker=AAPL&page=0&size=25" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"content\": [\n    {\n      \"id\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"ticker\": \"AAPL\",\n      \"side\": \"BUY\",\n      \"type\": \"MARKET\",\n      \"quantity\": 10,\n      \"limitPrice\": null,\n      \"filledPrice\": 172.35,\n      \"filledQty\": 10,\n      \"status\": \"FILLED\",\n      \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n      \"rejectionReason\": null,\n      \"createdAt\": \"2026-03-17T17:00:00Z\",\n      \"expiresAt\": null,\n      \"updatedAt\": \"2026-03-17T17:00:05Z\"\n    }\n  ],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 25,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 1,\n  \"totalPages\": 1,\n  \"last\": true,\n  \"first\": true\n}"
+            },
+            {
+              "name": "200 OK — filtered by date range",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/orders?from=2026-03-01&to=2026-03-18&page=0&size=25" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"content\": [],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 25,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 0,\n  \"totalPages\": 0,\n  \"last\": true,\n  \"first\": true\n}"
+            },
+            {
+              "name": "400 Bad Request — invalid date format",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/orders?from=2026-23-01" }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"Bad Request\",\n  \"message\": \"Invalid value for 'from'. Expected format: YYYY-MM-DD (e.g. 2026-03-17)\",\n  \"timestamp\": \"2026-03-18T02:43:14.855050655Z\",\n  \"path\": \"uri=/orders\",\n  \"service\": \"order-service\"\n}"
+            },
+            {
+              "name": "400 Bad Request — invalid status value",
+              "originalRequest": {
+                "method": "GET",
+                "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+                "url": { "raw": "{{base_url}}/orders?status=INVALID" }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"Bad Request\",\n  \"message\": \"No enum constant com.equiflow.order.model.enums.OrderStatus.INVALID\",\n  \"timestamp\": \"2026-03-18T02:43:14.855050655Z\",\n  \"path\": \"uri=/orders\",\n  \"service\": \"order-service\"\n}"
             }
           ]
         },
