@@ -17,9 +17,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.UUID;
+
+import org.springframework.data.jpa.domain.Specification;
 
 @Slf4j
 @Service
@@ -91,8 +95,26 @@ public class OrderService {
         return toResponse(order);
     }
 
-    public Page<OrderResponse> listOrders(UUID userId, Pageable pageable) {
-        return orderRepository.findByUserId(userId, pageable).map(this::toResponse);
+    public Page<OrderResponse> listOrders(LocalDate from, LocalDate to, String status, String ticker, UUID userId, Pageable pageable) {
+        Specification<Order> spec = Specification.where((root, query, cb) -> cb.equal(root.get("userId"), userId));
+
+        if (from != null) {
+            Instant fromInstant = from.atStartOfDay(ZoneOffset.UTC).toInstant();
+            spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("createdAt"), fromInstant));
+        }
+        if (to != null) {
+            Instant toInstant = to.plusDays(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+            spec = spec.and((root, query, cb) -> cb.lessThan(root.get("createdAt"), toInstant));
+        }
+        if (status != null && !status.isBlank()) {
+            OrderStatus orderStatus = OrderStatus.valueOf(status.toUpperCase());
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("status"), orderStatus));
+        }
+        if (ticker != null && !ticker.isBlank()) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("ticker"), ticker.toUpperCase()));
+        }
+
+        return orderRepository.findAll(spec, pageable == null ? Pageable.unpaged() : pageable).map(this::toResponse);
     }
 
     @Transactional

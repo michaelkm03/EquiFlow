@@ -7,7 +7,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
@@ -16,6 +18,17 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, Object>> handleTypeMismatch(MethodArgumentTypeMismatchException ex, WebRequest request) {
+        String message = "Invalid value for '" + ex.getName() + "'. Expected format: YYYY-MM-DD (e.g. 2026-03-17)";
+        return errorResponse(HttpStatus.BAD_REQUEST, message, request.getDescription(false));
+    }
+
+    @ExceptionHandler(DateTimeException.class)
+    public ResponseEntity<Map<String, Object>> handleDateFormat(DateTimeException ex, WebRequest request) {
+        return errorResponse(HttpStatus.BAD_REQUEST, "Invalid date format. Expected YYYY-MM-DD (e.g. 2026-03-17)", request.getDescription(false));
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalArgument(
