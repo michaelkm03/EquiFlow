@@ -19,6 +19,7 @@ public class OrderEventPublisher {
     private static final String TOPIC_PLACED = "equiflow.order.placed";
     private static final String TOPIC_FILLED = "equiflow.order.filled";
     private static final String TOPIC_CANCELLED = "equiflow.order.cancelled";
+    private static final String TOPIC_STOP_LOSS_TRIGGERED = "equiflow.order.stop-loss.triggered";
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final ObjectMapper objectMapper;
@@ -39,6 +40,13 @@ public class OrderEventPublisher {
         Map<String, Object> event = buildEvent("ORDER_CANCELLED", order);
         kafkaTemplate.send(TOPIC_CANCELLED, order.getId().toString(), event);
         log.info("Published ORDER_CANCELLED event for order: {}", order.getId());
+    }
+
+    public void publishStopLossTriggered(Order order) {
+        Map<String, Object> event = buildEvent("STOP_LOSS_TRIGGERED", order);
+        event.put("triggerPrice", order.getTriggerPrice());
+        kafkaTemplate.send(TOPIC_STOP_LOSS_TRIGGERED, order.getId().toString(), event);
+        log.info("Published STOP_LOSS_TRIGGERED event for order: {}", order.getId());
     }
 
     private Map<String, Object> buildEvent(String eventType, Order order) {

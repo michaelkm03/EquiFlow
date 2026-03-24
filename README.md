@@ -9,6 +9,7 @@ A high-integrity US equity trading engine built with Java 21 and Spring Boot 3.x
 ## Features
 
 - **Order book** — real bid/ask matching with price-time priority. Market orders fill via existing limits then market maker. Limit orders queue and expire at 4 PM ET.
+- **Stop-loss orders** — price-triggered sell/buy orders. Submitted with a `triggerPrice`; held as `PENDING_TRIGGER` until market data crosses the threshold, then executed as a market order via the matching engine.
 - **Compliance** — wash-sale hard block (30-day window) and insufficient funds check before any order executes.
 - **T+1 Settlement** — scheduled job at market close, business-day aware with 2026 NYSE holiday calendar.
 - **Regulatory audit log** — append-only, PostgreSQL row-security enforced. No UPDATE or DELETE permitted.
@@ -193,6 +194,45 @@ curl http://localhost:8080/orders/{ORDER_ID} \
 # 4. View your portfolio
 curl http://localhost:8080/ledger/accounts/{USER_ID} \
   -H "Authorization: Bearer $TOKEN"
+```
+
+---
+
+## Stop-Loss Orders
+
+Stop-loss orders are held pending until the market price crosses a trigger threshold, then automatically executed as market orders.
+
+### Submit a stop-loss order
+
+```bash
+curl -X POST http://localhost:8080/orders \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ticker":"AAPL","side":"SELL","type":"STOP_LOSS","quantity":10,"triggerPrice":170.00}'
+```
+
+The order is saved with status `PENDING_TRIGGER` and passes compliance via the saga — it does not enter the matching engine until the trigger fires.
+
+### How triggering works
+
+1. **market-data-service** calls `POST /orders/internal/stop-loss/evaluate` on every price tick and on each scenario step.
+2. **order-service** (`StopLossService`) finds `PENDING_TRIGGER` orders where `triggerPrice >= currentPrice`, marks them `TRIGGERED`, and publishes to Kafka topic `equiflow.order.stop-loss.triggered`.
+3. **saga-orchestrator** consumes the event, overrides the order type to `MARKET`, and re-runs the saga through matching, ledger debit, and settlement.
+
+### Test stop-loss triggering
+
+Run a flash crash scenario to drive prices down across all tickers:
+
+```bash
+curl -X POST http://localhost:8080/admin/market/scenarios/flash_crash/start \
+  -H "Authorization: Bearer $BOT_TOKEN"
+```
+
+Or simulate a single price tick:
+
+```bash
+curl -X POST http://localhost:8080/market/tickers/AAPL/tick \
+  -H "Authorization: Bearer $BOT_TOKEN"
 ```
 
 ---

@@ -25,6 +25,10 @@ market:
   scenario:
     step-interval-ms: 5000
 
+feign:
+  order-service:
+    url: http://order-service:8082
+
 springdoc:
   api-docs:
     path: /v3/api-docs

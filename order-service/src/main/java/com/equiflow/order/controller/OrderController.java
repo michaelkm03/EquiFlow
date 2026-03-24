@@ -3,6 +3,7 @@ package com.equiflow.order.controller;
 import com.equiflow.order.dto.OrderRequest;
 import com.equiflow.order.dto.OrderResponse;
 import com.equiflow.order.service.OrderService;
+import com.equiflow.order.service.StopLossService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -22,6 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +37,7 @@ import java.util.UUID;
 public class OrderController {
 
     private final OrderService orderService;
+    private final StopLossService stopLossService;
 
     @PostMapping
     @Operation(summary = "Submit a new order", description = "Submit a BUY or SELL order (MARKET or LIMIT type)")
@@ -105,6 +108,15 @@ public class OrderController {
     @Operation(summary = "Get order book snapshot for a ticker")
     public ResponseEntity<Map<String, Object>> getOrderBook(@PathVariable String ticker) {
         return ResponseEntity.ok(orderService.getOrderBook(ticker));
+    }
+
+    @PostMapping("/internal/stop-loss/evaluate")
+    @Operation(summary = "Evaluate stop-loss triggers for a ticker (internal use by market-data-service)")
+    public ResponseEntity<Void> evaluateStopLoss(
+            @RequestParam String ticker,
+            @RequestParam BigDecimal currentPrice) {
+        stopLossService.evaluateTriggers(ticker, currentPrice);
+        return ResponseEntity.ok().build();
     }
 
     private UUID extractUserId(Authentication auth) {

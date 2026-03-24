@@ -9,5 +9,6 @@ public enum OrderStatus {
     CANCELLED,
     REJECTED,
     FAILED,
-    PENDING_TRIGGER 
+    PENDING_TRIGGER,
+    TRIGGERED
 }

@@ -85,12 +85,19 @@ public class Order {
         createdAt = Instant.now();
         updatedAt = Instant.now();
         if (status == null) {
-            status = OrderStatus.PENDING;
+            status = resolveInitialStatus();
         }
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = Instant.now();
+    }
+
+    private OrderStatus resolveInitialStatus() {
+        return switch (type) {
+            case STOP_LOSS -> OrderStatus.PENDING_TRIGGER;
+            case LIMIT, MARKET -> OrderStatus.PENDING;
+        };
     }
 }

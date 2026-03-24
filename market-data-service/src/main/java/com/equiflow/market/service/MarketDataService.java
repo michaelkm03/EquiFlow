@@ -20,6 +20,7 @@ public class MarketDataService {
 
     private final TickerPriceRepository tickerPriceRepository;
     private final ScenarioEngine scenarioEngine;
+    private final StopLossTriggerService stopLossTriggerService;
     private final Random random = new Random();
 
     public TickerPrice getPrice(String ticker) {
@@ -52,7 +53,9 @@ public class MarketDataService {
             price.setLowPrice(newPrice);
         }
 
-        return tickerPriceRepository.save(price);
+        TickerPrice saved = tickerPriceRepository.save(price);
+        stopLossTriggerService.evaluateTriggers(saved.getTicker(), saved.getCurrentPrice());
+        return saved;
     }
 
     public Map<String, Object> triggerScenario(String scenarioName, String triggeredBy) {

@@ -17,7 +17,7 @@ CREATE TABLE orders (
     limit_price NUMERIC(18, 4),
     filled_price NUMERIC(18, 4),
     filled_qty NUMERIC(18, 8),
-    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    status VARCHAR(20) NOT NULL,
     saga_id UUID,
     rejection_reason TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),

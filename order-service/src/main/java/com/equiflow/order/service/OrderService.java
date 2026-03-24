@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,8 +23,6 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.Map;
 import java.util.UUID;
-
-import org.springframework.data.jpa.domain.Specification;
 
 @Slf4j
 @Service
@@ -49,6 +48,10 @@ public class OrderService {
             throw new IllegalArgumentException("Limit price is required for LIMIT orders");
         }
 
+        if (request.getType() == OrderType.STOP_LOSS && request.getTriggerPrice() == null) {
+            throw new IllegalArgumentException("Trigger price is required for STOP_LOSS orders");
+        }
+
         Order order = Order.builder()
                 .userId(userId)
                 .ticker(request.getTicker().toUpperCase())
@@ -57,7 +60,6 @@ public class OrderService {
                 .quantity(request.getQuantity())
                 .limitPrice(request.getLimitPrice())
                 .triggerPrice(request.getTriggerPrice())
-                .status(OrderStatus.PENDING)
                 .expiresAt(request.getType() == OrderType.LIMIT
                         ? Instant.now().plus(1, ChronoUnit.DAYS)
                         : null)
@@ -66,14 +68,11 @@ public class OrderService {
         order = orderRepository.save(order);
         eventPublisher.publishOrderPlaced(order);
 
-        // Execute immediately
-        if (request.getType() == OrderType.STOP_LOSS) {
-            return toResponse(order);
-        } else if (request.getType() == OrderType.MARKET) {
-            order = matchingEngine.executeMarketOrder(order);
-        } else {
-            order = matchingEngine.executeLimitOrder(order);
-        }
+        order = switch (request.getType()) {
+            case STOP_LOSS -> order;
+            case MARKET -> matchingEngine.executeMarketOrder(order);
+            case LIMIT -> matchingEngine.executeLimitOrder(order);
+        };
 
         return toResponse(order);
     }
@@ -83,11 +82,10 @@ public class OrderService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
 
-        if (order.getType() == OrderType.MARKET) {
-            order = matchingEngine.executeMarketOrder(order);
-        } else {
-            order = matchingEngine.executeLimitOrder(order);
-        }
+        order = switch (order.getType()) {
+            case MARKET, STOP_LOSS -> matchingEngine.executeMarketOrder(order);
+            case LIMIT -> matchingEngine.executeLimitOrder(order);
+        };
 
         return toResponse(order);
     }

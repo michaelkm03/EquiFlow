@@ -26,6 +26,7 @@ public class ScenarioEngine {
 
     private final TickerPriceRepository tickerPriceRepository;
     private final ScenarioEventRepository scenarioEventRepository;
+    private final StopLossTriggerService stopLossTriggerService;
 
     private final AtomicBoolean active = new AtomicBoolean(false);
     private final AtomicReference<String> activeScenario = new AtomicReference<>("");
@@ -138,6 +139,7 @@ public class ScenarioEngine {
                     .setScale(4, RoundingMode.HALF_UP);
             price.setCurrentPrice(newPrice);
             tickerPriceRepository.save(price);
+            stopLossTriggerService.evaluateTriggers(price.getTicker(), newPrice);
         });
 
         scenarioEventRepository.save(ScenarioEvent.builder()

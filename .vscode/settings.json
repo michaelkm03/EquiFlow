@@ -27,8 +27,8 @@
             "server": "localhost",
             "port": 5432,
             "driver": "PostgreSQL",
-            "name": "orders",
-            "database": "equiflow_orders",
+            "name": "market",
+            "database": "equiflow_market",
             "username": "equiflow"
         },
         {
@@ -37,9 +37,10 @@
             "server": "localhost",
             "port": 5432,
             "driver": "PostgreSQL",
-            "name": "market",
-            "database": "equiflow_market",
-            "username": "equiflow"
+            "name": "orders",
+            "database": "equiflow_orders",
+            "username": "equiflow",
+            "password": "localdev"
         }
     ]
 }
