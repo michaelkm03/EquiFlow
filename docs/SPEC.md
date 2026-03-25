@@ -1,7 +1,7 @@
 # EquiFlow — Product & Technical Specification
 **Version:** 1.2
 **Status:** Approved
-**Last Updated:** 2026-03-09
+**Last Updated:** 2026-03-25
 **Changes from v1.1:** Removed all cloud/deployment infrastructure. Project is local-only (Docker Compose). Replaced AWS services with local equivalents.
 
 ---
@@ -195,21 +195,26 @@ users
 | `GET` | `/orders` | `TRADER`, `REGULATOR` | List orders (trader sees own; regulator sees all) |
 | `DELETE` | `/orders/{orderId}` | `TRADER` | Cancel a pending limit order |
 | `GET` | `/orders/book/{ticker}` | `BOT_OPERATOR` | View current order book for a ticker |
+| `POST` | `/orders/{orderId}/match` | Internal (Saga) | Trigger matching for an order |
+| `POST` | `/orders/internal/stop-loss/evaluate` | Internal (market-data-service) | Evaluate stop-loss triggers for a ticker at a given price |
 
 #### Order Types
 - `MARKET` — executes immediately at current market price
 - `LIMIT` — enters order book, executes only at `limitPrice` or better
+- `STOP_LOSS` — held as `PENDING_TRIGGER` until market price falls to or below `triggerPrice`; then executes as a market order via the saga
 
 #### Order Statuses
 | Status | Description |
 |---|---|
-| `PENDING` | Submitted, awaiting Saga start |
+| `PENDING` | Submitted, awaiting Saga start (MARKET and LIMIT orders) |
+| `PENDING_TRIGGER` | Stop-loss order waiting for price trigger condition |
+| `TRIGGERED` | Stop-loss trigger condition met; re-entering saga for execution |
 | `COMPLIANCE_CHECK` | Being evaluated by compliance-service |
 | `OPEN` | In order book, awaiting match |
 | `FILLED` | Fully matched and executed |
 | `PARTIALLY_FILLED` | Some quantity matched |
 | `CANCELLED` | Cancelled by user or expired at EOD |
-| `REJECTED` | Blocked by compliance or market hours |
+| `REJECTED` | Blocked by compliance, market hours, or no liquidity |
 | `FAILED` | System error mid-Saga |
 
 #### Market Hours Enforcement
@@ -232,20 +237,22 @@ users
 #### Data Model
 ```
 orders
-  id             UUID PRIMARY KEY
-  user_id        UUID NOT NULL
-  ticker         VARCHAR(10) NOT NULL
-  side           ENUM('BUY','SELL') NOT NULL
-  type           ENUM('MARKET','LIMIT') NOT NULL
-  quantity       INTEGER NOT NULL
-  limit_price    DECIMAL(12,4)
-  filled_price   DECIMAL(12,4)
-  filled_qty     INTEGER DEFAULT 0
-  status         ENUM(...) NOT NULL
-  saga_id        UUID
-  created_at     TIMESTAMP NOT NULL
-  expires_at     TIMESTAMP NOT NULL
-  updated_at     TIMESTAMP NOT NULL
+  id               UUID PRIMARY KEY
+  user_id          UUID NOT NULL
+  ticker           VARCHAR(10) NOT NULL
+  side             ENUM('BUY','SELL') NOT NULL
+  type             ENUM('MARKET','LIMIT','STOP_LOSS') NOT NULL
+  quantity         NUMERIC(18,8) NOT NULL
+  limit_price      NUMERIC(18,4)
+  trigger_price    NUMERIC(18,4)              -- required for STOP_LOSS orders
+  filled_price     NUMERIC(18,4)
+  filled_qty       NUMERIC(18,8) DEFAULT 0
+  status           ENUM('PENDING','PENDING_TRIGGER','TRIGGERED',...) NOT NULL
+  saga_id          UUID
+  rejection_reason TEXT
+  created_at       TIMESTAMP NOT NULL
+  expires_at       TIMESTAMP
+  updated_at       TIMESTAMP NOT NULL
 
 order_book_entries
   id             UUID PRIMARY KEY
@@ -279,35 +286,29 @@ Retail:  WMT, TGT, COST, HD
 
 | Method | Path | Role | Description |
 |---|---|---|---|
-| `GET` | `/market/price/{ticker}` | Any authenticated | Get current simulated price |
 | `GET` | `/market/prices` | Any authenticated | Get all 30 ticker prices |
-| `GET` | `/market/scenarios` | `BOT_OPERATOR` | List available named scenarios |
-| `POST` | `/admin/market/scenario/{scenarioName}` | `BOT_OPERATOR` | Trigger a named price scenario |
-| `POST` | `/admin/market/scenario/stop` | `BOT_OPERATOR` | Stop active scenario, return to baseline |
+| `GET` | `/market/prices/{ticker}` | Any authenticated | Get current simulated price for a ticker |
+| `POST` | `/market/prices/{ticker}/tick` | `BOT_OPERATOR` | Simulate a single random price tick (±0.5%) |
+| `GET` | `/market/status` | Any authenticated | Scenario engine status |
+| `POST` | `/admin/market/scenarios/{scenarioName}/start` | `BOT_OPERATOR` | Start a named price scenario |
+| `POST` | `/admin/market/scenarios/stop` | `BOT_OPERATOR` | Stop the active scenario |
+| `GET` | `/admin/market/scenarios/status` | `BOT_OPERATOR` | Get scenario engine status and available scenarios |
 
-#### Price Scenarios (defined in `scenarios.yml`)
+#### Price Scenarios (defined in `ScenarioEngine.java`)
 
-| Scenario Name | Description |
-|---|---|
-| `flash-crash` | AAPL drops 15% in 10 seconds, recovers over 60 seconds |
-| `bull-surge` | All tech tickers rise 5% over 30 seconds |
-| `volatility-spike` | All tickers oscillate ±3% randomly for 60 seconds |
-| `market-open-pump` | All tickers gap up 2% at scenario start, then normalize |
-| `single-ticker-halt` | TSLA price frozen at last value for 30 seconds |
-| `sector-rotation` | Energy tickers +8%, Tech tickers -4% simultaneously |
+Scenarios apply sequential percentage price deltas to **all 30 tickers** every 5 seconds (configurable via `market.scenario.step-interval-ms`). After the final step the scenario stops automatically.
 
-#### scenarios.yml Structure
-```yaml
-scenarios:
-  flash-crash:
-    tickers: [AAPL]
-    steps:
-      - at_second: 0
-        action: CHANGE_PRICE
-        delta_pct: -15
-      - at_second: 60
-        action: RESTORE_BASELINE
-```
+| Scenario Name | Steps (% change per tick) | Net Effect |
+|---|---|---|
+| `flash_crash` | -5%, -8%, -12%, -15%, +10%, +7% | Sharp drop then partial recovery |
+| `bull_run` | +2%, +3%, +5%, +4%, +6%, +3% | Steady upward climb |
+| `bear_market` | -1%, -2%, -1.5%, -2.5%, -3%, -2% | Gradual sustained decline |
+| `high_volatility` | +4%, -5%, +7%, -6%, +9%, -8% | Alternating large swings |
+| `sector_rotation` | +3%, +2%, -1%, +4%, +1%, +2% | Moderate uneven moves |
+| `liquidity_crisis` | -3%, -7%, -10%, -8%, -5%, -3% | Accelerating decline then slow recovery |
+
+On each step, after prices are updated, `StopLossTriggerService.evaluateTriggers()` is called for every ticker — any `PENDING_TRIGGER` stop-loss orders whose `triggerPrice >= newPrice` will fire.
+
 
 #### Data Model
 ```
@@ -497,6 +498,7 @@ settlements
 | Event Type | Triggered By |
 |---|---|
 | `ORDER_SUBMITTED` | order-service |
+| `STOP_LOSS_TRIGGERED` | order-service |
 | `COMPLIANCE_APPROVED` | compliance-service |
 | `COMPLIANCE_REJECTED` | compliance-service |
 | `ORDER_FILLED` | order-service |
@@ -542,16 +544,38 @@ audit_events
 **Database:** `equiflow_saga`
 **Responsibility:** Central coordinator for all multi-step order transactions.
 
-#### Saga Flow — Happy Path
+#### Saga Flow — Happy Path (MARKET / LIMIT)
 
 ```
 saga-orchestrator
   Step 1: POST /compliance/check     → compliance-service
-  Step 2: Matching engine execution  → order-service (internal)
+  Step 2: POST /orders/{id}/match    → order-service (matching engine)
   Step 3: POST /ledger/debit         → ledger-service
-  Step 4: Write settlement record    → settlement-service
-  Step 5: Publish audit events       → audit-service (via Kafka)
+  Step 4: POST /settlement/create    → settlement-service
+  Step 5: Saga marked COMPLETED
 ```
+
+#### Saga Flow — STOP_LOSS Orders
+
+Stop-loss orders enter the saga twice:
+
+**First entry** (triggered by `equiflow.order.placed`):
+```
+  Step 1: POST /compliance/check     → compliance-service
+  [Short-circuit] type=STOP_LOSS → saga marked COMPLETED; steps 2–4 skipped
+  Order remains PENDING_TRIGGER until price trigger fires
+```
+
+**Second entry** (triggered by `equiflow.order.stop-loss.triggered`):
+```
+  [type overridden to MARKET in event payload]
+  Step 1: POST /compliance/check     → compliance-service (re-runs)
+  Step 2: POST /orders/{id}/match    → order-service (executes as market order)
+  Step 3: POST /ledger/debit         → ledger-service
+  Step 4: POST /settlement/create    → settlement-service
+  Step 5: Saga marked COMPLETED
+```
+
 
 #### Saga Flow — Compensating Rollbacks
 
@@ -569,6 +593,8 @@ saga-orchestrator
 |---|---|---|---|
 | `GET` | `/saga/{sagaId}` | `BOT_OPERATOR`, `REGULATOR` | Get saga state and step history |
 | `GET` | `/saga/active` | `BOT_OPERATOR` | List all active sagas |
+| `GET` | `/saga/order/{orderId}` | `BOT_OPERATOR`, `REGULATOR` | Get saga by order ID |
+| `GET` | `/saga/status/{status}` | `BOT_OPERATOR`, `REGULATOR` | List sagas by status |
 
 #### Data Model
 ```
@@ -1026,8 +1052,8 @@ Returns current prices for all 30 tickers.
 
 ---
 
-##### `GET /market/scenarios`
-Lists all available named price scenarios.
+##### `GET /admin/market/scenarios/status`
+Lists all available named price scenarios and scenario engine status.
 
 **Auth required:** `BOT_OPERATOR`
 
@@ -1035,30 +1061,29 @@ Lists all available named price scenarios.
 ```json
 {
   "scenarios": [
-    { "name": "flash-crash",        "description": "AAPL drops 15% in 10s", "status": "AVAILABLE" },
-    { "name": "bull-surge",         "description": "All tech tickers +5%",  "status": "AVAILABLE" },
-    { "name": "volatility-spike",   "description": "All tickers ±3% random","status": "RUNNING"   },
-    { "name": "market-open-pump",   "description": "All tickers gap up 2%", "status": "AVAILABLE" },
-    { "name": "single-ticker-halt", "description": "TSLA price frozen 30s", "status": "AVAILABLE" },
-    { "name": "sector-rotation",    "description": "Energy +8%, Tech -4%",  "status": "AVAILABLE" }
+    { "name": "flash_crash",       "status": "AVAILABLE" },
+    { "name": "bull_run",          "status": "AVAILABLE" },
+    { "name": "bear_market",       "status": "AVAILABLE" },
+    { "name": "high_volatility",   "status": "RUNNING"   },
+    { "name": "sector_rotation",   "status": "AVAILABLE" },
+    { "name": "liquidity_crisis",  "status": "AVAILABLE" }
   ]
 }
 ```
 
 ---
 
-##### `POST /admin/market/scenario/{scenarioName}`
-Triggers a named price scenario.
+##### `POST /admin/market/scenarios/{scenarioName}/start`
+Starts a named price scenario.
 
 **Auth required:** `BOT_OPERATOR`
 
 **Response `200 OK`:**
 ```json
 {
-  "scenarioName": "flash-crash",
+  "scenarioName": "flash_crash",
   "status": "RUNNING",
-  "startedAt": "2026-03-09T10:16:00Z",
-  "estimatedEndAt": "2026-03-09T10:17:10Z"
+  "startedAt": "2026-03-09T10:16:00Z"
 }
 ```
 
@@ -1066,23 +1091,22 @@ Triggers a named price scenario.
 ```json
 {
   "error": "SCENARIO_ALREADY_RUNNING",
-  "message": "Scenario 'volatility-spike' is active. POST /admin/market/scenario/stop first."
+  "message": "Scenario 'high_volatility' is active. POST /admin/market/scenarios/stop first."
 }
 ```
 
 ---
 
-##### `POST /admin/market/scenario/stop`
-Stops the active scenario and restores baseline prices.
+##### `POST /admin/market/scenarios/stop`
+Stops the active scenario.
 
 **Auth required:** `BOT_OPERATOR`
 
 **Response `200 OK`:**
 ```json
 {
-  "stoppedScenario": "flash-crash",
-  "stoppedAt": "2026-03-09T10:16:30Z",
-  "pricesRestoredToBaseline": true
+  "stoppedScenario": "flash_crash",
+  "stoppedAt": "2026-03-09T10:16:30Z"
 }
 ```
 
@@ -1693,6 +1717,7 @@ All `4xx` and `5xx` responses use this shape:
 | `equiflow.order.placed` | order-service | saga-orchestrator | New order submitted |
 | `equiflow.order.filled` | order-service | audit-service, settlement-service | Order matched and filled |
 | `equiflow.order.cancelled` | order-service | audit-service, ledger-service | Order cancelled or expired |
+| `equiflow.order.stop-loss.triggered` | order-service | saga-orchestrator | Stop-loss trigger condition met; re-enter saga as market order |
 | `equiflow.compliance.approved` | compliance-service | saga-orchestrator, audit-service | Compliance check passed |
 | `equiflow.compliance.rejected` | compliance-service | saga-orchestrator, audit-service | Compliance check failed |
 | `equiflow.ledger.hold-placed` | ledger-service | audit-service | Funds reserved |

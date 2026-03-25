@@ -97,10 +97,11 @@ All services auto-apply Flyway migrations and seed users on first boot.
 
 **To stop:**
 ```bash
-docker-compose down
+# Stop containers (data is preserved):
+docker-compose stop
 
-# To also wipe all data and start fresh:
-docker-compose down -v
+# Stop and destroy all containers + wipe all data:
+docker-compose down
 ```
 
 ### 3. Verify everything is running
@@ -373,8 +374,8 @@ netstat -ano | findstr :<port>
 
 **Database migration errors**
 ```bash
-# Wipe and restart clean
-docker-compose down -v
+# Wipe all data and restart clean
+docker-compose down
 docker-compose up --build
 ```
 
