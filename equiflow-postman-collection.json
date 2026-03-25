@@ -450,6 +450,59 @@
           ]
         },
         {
+          "name": "POST /orders — Submit Stop-Loss Order",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "var j = pm.response.json();",
+            "if (j.id) { pm.collectionVariables.set('order_id', j.id); console.log('order_id:', j.id); }"
+          ]}}],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"triggerPrice\": 150.00\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/orders",
+              "host": ["{{base_url}}"],
+              "path": ["orders"]
+            },
+            "description": "Submits a stop-loss sell order. The order is held with status PENDING_TRIGGER and does not enter the matching engine immediately.\n\nThe saga runs compliance only, then parks — execution resumes automatically when market-data-service detects that the current price has fallen to or below triggerPrice.\n\nSet triggerPrice below the current market price to test triggering manually via POST /orders/internal/stop-loss/evaluate.\n\norder_id is auto-saved for use in subsequent requests."
+          },
+          "response": [
+            {
+              "name": "201 Created — PENDING_TRIGGER",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }, { "key": "Authorization", "value": "Bearer {{trader1_token}}" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"triggerPrice\": 150.00\n}" },
+                "url": { "raw": "{{base_url}}/orders" }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000010\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"triggerPrice\": 150.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING_TRIGGER\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2026-03-24T17:00:00Z\",\n  \"expiresAt\": null,\n  \"updatedAt\": \"2026-03-24T17:00:00Z\"\n}"
+            },
+            {
+              "name": "400 Bad Request — missing triggerPrice",
+              "originalRequest": {
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": { "mode": "raw", "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10\n}" },
+                "url": { "raw": "{{base_url}}/orders" }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [{ "key": "Content-Type", "value": "application/json" }],
+              "body": "{\n  \"error\": \"Bad Request\",\n  \"message\": \"Trigger price is required for STOP_LOSS orders\",\n  \"timestamp\": \"2026-03-24T17:00:00Z\",\n  \"path\": \"uri=/orders\",\n  \"service\": \"order-service\"\n}"
+            }
+          ]
+        },
+        {
           "name": "GET /orders/:orderId — Get Order by ID",
           "request": {
             "method": "GET",
@@ -653,6 +706,37 @@
               "_postman_previewlanguage": "json",
               "header": [{ "key": "Content-Type", "value": "application/json" }],
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"filledPrice\": 172.35,\n  \"filledQty\": 10,\n  \"status\": \"FILLED\",\n  \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:03Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /orders/internal/stop-loss/evaluate — Manually Evaluate Stop-Loss Triggers",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/orders/internal/stop-loss/evaluate?ticker=AAPL&currentPrice=100.00",
+              "host": ["{{base_url}}"],
+              "path": ["orders", "internal", "stop-loss", "evaluate"],
+              "query": [
+                { "key": "ticker", "value": "AAPL", "description": "Ticker symbol to evaluate (case-insensitive)" },
+                { "key": "currentPrice", "value": "100.00", "description": "Simulated current price — set this below the triggerPrice of the order you want to fire" }
+              ]
+            },
+            "description": "Internal endpoint that evaluates all PENDING_TRIGGER stop-loss orders for the given ticker against a supplied price. Any order whose triggerPrice ≥ currentPrice is marked TRIGGERED and a Kafka event is published to kick off saga execution.\n\nNo authentication required — internal use only.\n\nUseful for testing stop-loss execution without waiting for a real price movement. Set currentPrice to a value below your order's triggerPrice (e.g. 1.00) to fire it immediately."
+          },
+          "response": [
+            {
+              "name": "200 OK — triggers evaluated",
+              "originalRequest": {
+                "method": "POST",
+                "url": { "raw": "{{base_url}}/orders/internal/stop-loss/evaluate?ticker=AAPL&currentPrice=100.00" }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "text",
+              "header": [],
+              "body": ""
             }
           ]
         },
@@ -2071,6 +2155,133 @@
                 "method": "POST",
                 "header": [],
                 "url": { "raw": "{{base_url}}/admin/chaos/stop", "host": ["{{base_url}}"], "path": ["admin","chaos","stop"] }
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "Flow E — Stop-Loss Order Lifecycle",
+          "description": "End-to-end test of the stop-loss feature. Submits a stop-loss sell order, confirms it parks as PENDING_TRIGGER, fires the trigger manually, and verifies the order fills through the saga.\n\nRun 00 - Setup & Auth first to populate tokens.",
+          "item": [
+            {
+              "name": "E1 — Check current AAPL price",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/market/prices/AAPL", "host": ["{{base_url}}"], "path": ["market","prices","AAPL"] },
+                "description": "Note the currentPrice. Set triggerPrice in E2 above this value so the order parks immediately as PENDING_TRIGGER. The evaluate call in E5 will then fire it by passing a lower price."
+              },
+              "response": []
+            },
+            {
+              "name": "E2 — Submit STOP_LOSS SELL order (saves order_id)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "var j = pm.response.json();",
+                "if (j.id) { pm.collectionVariables.set('order_id', j.id); console.log('order_id:', j.id); }",
+                "pm.test('Status is PENDING_TRIGGER', function() { pm.expect(j.status).to.eql('PENDING_TRIGGER'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "POST",
+                "header": [{ "key": "Content-Type", "value": "application/json" }],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"triggerPrice\": 9999.00\n}",
+                  "options": { "raw": { "language": "json" } }
+                },
+                "url": { "raw": "{{base_url}}/orders", "host": ["{{base_url}}"], "path": ["orders"] },
+                "description": "triggerPrice is set to 9999.00 — well above any real market price — so the order parks immediately as PENDING_TRIGGER. E5 will fire it by supplying a currentPrice of 1.00.\n\norder_id is auto-saved. The test script asserts status is PENDING_TRIGGER."
+              },
+              "response": []
+            },
+            {
+              "name": "E3 — Confirm order is PENDING_TRIGGER",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "var j = pm.response.json();",
+                "pm.test('Status is PENDING_TRIGGER', function() { pm.expect(j.status).to.eql('PENDING_TRIGGER'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["orders","{{order_id}}"] },
+                "description": "Confirms the order was saved with PENDING_TRIGGER status and has not entered the matching engine."
+              },
+              "response": []
+            },
+            {
+              "name": "E4 — View saga (compliance passed, parked)",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "var j = pm.response.json();",
+                "if (j.id) { pm.collectionVariables.set('saga_id', j.id); }",
+                "pm.test('Saga is COMPLETED', function() { pm.expect(j.status).to.eql('COMPLETED'); });",
+                "pm.test('Saga stopped at step 1 (compliance only)', function() { pm.expect(j.currentStep).to.eql(5); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/saga/order/{{order_id}}", "host": ["{{base_url}}"], "path": ["saga","order","{{order_id}}"] },
+                "description": "The saga should be COMPLETED with currentStep=5 but only one step recorded (COMPLIANCE_CHECK). Steps 2-4 were skipped because the order type is STOP_LOSS — execution is deferred until the price triggers."
+              },
+              "response": []
+            },
+            {
+              "name": "E5 — Fire the stop-loss trigger (currentPrice=1.00)",
+              "request": {
+                "auth": { "type": "noauth" },
+                "method": "POST",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/orders/internal/stop-loss/evaluate?ticker=AAPL&currentPrice=1.00",
+                  "host": ["{{base_url}}"],
+                  "path": ["orders","internal","stop-loss","evaluate"],
+                  "query": [
+                    { "key": "ticker", "value": "AAPL" },
+                    { "key": "currentPrice", "value": "1.00" }
+                  ]
+                },
+                "description": "Tells order-service that AAPL is now trading at $1.00. Since our triggerPrice (9999.00) ≥ 1.00, the order transitions to TRIGGERED and a Kafka event fires to the saga-orchestrator to execute it as a market order."
+              },
+              "response": []
+            },
+            {
+              "name": "E6 — Poll order status until FILLED",
+              "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+                "var j = pm.response.json();",
+                "console.log('Current status:', j.status);",
+                "pm.test('Order has progressed past PENDING_TRIGGER', function() { pm.expect(j.status).to.not.eql('PENDING_TRIGGER'); });"
+              ]}}],
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/orders/{{order_id}}", "host": ["{{base_url}}"], "path": ["orders","{{order_id}}"] },
+                "description": "Run this a moment after E5. Expected progression: PENDING_TRIGGER → TRIGGERED → FILLED.\n\nIf still TRIGGERED, the saga is still in-flight — wait a second and run again."
+              },
+              "response": []
+            },
+            {
+              "name": "E7 — View saga (all steps completed)",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/saga/order/{{order_id}}", "host": ["{{base_url}}"], "path": ["saga","order","{{order_id}}"] },
+                "description": "The saga should now show all steps completed: COMPLIANCE_CHECK, ORDER_MATCHING, LEDGER_DEBIT, SETTLEMENT_CREATE."
+              },
+              "response": []
+            },
+            {
+              "name": "E8 — Check audit trail",
+              "request": {
+                "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{trader1_token}}", "type": "string" }] },
+                "method": "GET",
+                "header": [],
+                "url": { "raw": "{{base_url}}/audit/events/order/{{order_id}}", "host": ["{{base_url}}"], "path": ["audit","events","order","{{order_id}}"] },
+                "description": "Full event trail for the order. Should include ORDER_PLACED, STOP_LOSS_TRIGGERED, and ORDER_FILLED events."
               },
               "response": []
             }
