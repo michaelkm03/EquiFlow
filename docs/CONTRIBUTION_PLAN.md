@@ -356,12 +356,48 @@ delivery channel (email, push) is out of scope for this story.
 
 **Services Affected:** `ledger-service`
 
-**Database Changes:** None — tests use H2 in-memory or Testcontainers
+**Database Changes:** None — unit tests use Mockito; concurrency tests require Testcontainers (real Postgres needed for `SELECT FOR UPDATE` semantics — H2 does not enforce row-level locking)
+
+**Test Cases — `LedgerServiceTest` (unit, Mockito)**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `hold` | Normal hold on $100,000 account for $1,500 | `cashOnHold` = $1,500; `availableCash` = $98,500; HOLD transaction saved |
+| `hold` | Hold amount exactly equals `availableCash` (boundary) | Succeeds; `availableCash` = $0 |
+| `hold` | Amount exceeds `availableCash` | `IllegalStateException`: "Insufficient available funds"; balance unchanged |
+| `release` | Release $1,500 after a hold is placed | `cashOnHold` = $0; RELEASE transaction saved |
+| `release` | Called with no existing hold (`cashOnHold` = $0) | Floors to zero; no exception — safe for saga compensation calls |
+| `debit` | Debit $1,500 with matching hold already placed | `cashBalance` -= $1,500; `cashOnHold` -= $1,500; DEBIT transaction saved |
+| `debit` | `ticker` + `quantity` provided | `updatePosition` invoked; new position created with correct `avgCost` |
+| `debit` | No `ticker` (cash-only settlement) | No position upserted; only balance updated |
+| `debit` | `cashBalance` < requested amount | `IllegalStateException`: "Insufficient funds"; balance unchanged |
+| `updatePosition` | Second BUY on existing position | Quantity sums; `avgCost` recalculated as weighted average |
+| `updatePosition` | SELL reduces position | Quantity decreases; floors at zero if oversold |
+| `getAccount` | User ID has no account | `IllegalArgumentException` thrown |
+
+**Test Cases — `LedgerServiceConcurrencyTest` (integration, Testcontainers Postgres)**
+
+| Scenario | Assert |
+|----------|--------|
+| Two threads hold $800 simultaneously on a $1,000 account | Exactly one succeeds; one throws `IllegalStateException`; final `cashOnHold` = $800 |
+| Two threads debit $600 simultaneously on a $1,000 account | One succeeds; one throws; final `cashBalance` = $400; no lost update |
 
 **Acceptance Criteria:**
-- [ ] Hold, debit, release, and insufficient funds paths all have coverage
-- [ ] Concurrent debit on the same account produces a consistent final balance
-- [ ] Coverage for `LedgerService` reaches ≥ 80%
+- [ ] All 12 unit test cases pass with Mockito (no Spring context, no DB)
+- [ ] Both concurrency tests pass against a real Postgres container
+- [ ] `LedgerService` line coverage ≥ 80% per JaCoCo report
+
+**Measuring Coverage**
+
+JaCoCo is configured in the parent `pom.xml` and runs automatically during `mvn verify`. To generate and view the report for `ledger-service` only:
+
+```bash
+mvn verify -pl ledger-service
+open ledger-service/target/site/jacoco/index.html      # Mac
+start ledger-service/target/site/jacoco/index.html     # Windows
+```
+
+The HTML report shows each class with **line coverage %** (lines executed ÷ total executable lines) and **branch coverage %** (both sides of every `if`/`switch` hit ÷ total branches). Lines are highlighted green (covered), yellow (partially covered branch), or red (never executed). The 80% target applies to `LedgerService.java` line coverage specifically — not the whole module.
 
 ---
 
