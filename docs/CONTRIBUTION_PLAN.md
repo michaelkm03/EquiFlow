@@ -356,6 +356,28 @@ delivery channel (email, push) is out of scope for this story.
 
 **Services Affected:** `ledger-service`
 
+**New Files:**
+```
+ledger-service/src/test/java/com/equiflow/ledger/LedgerServiceTest.java
+ledger-service/src/test/java/com/equiflow/ledger/LedgerServiceConcurrencyTest.java
+```
+
+This follows the same convention used by every other service in the project:
+
+| Service | Test File |
+|---------|-----------|
+| `auth-service` | `src/test/java/com/equiflow/auth/AuthServiceTest.java` |
+| `order-service` | `src/test/java/com/equiflow/order/OrderServiceTest.java` |
+| `compliance-service` | `src/test/java/com/equiflow/compliance/ComplianceServiceTest.java` |
+| `audit-service` | `src/test/java/com/equiflow/audit/AuditServiceTest.java` |
+| `settlement-service` | `src/test/java/com/equiflow/settlement/SettlementServiceTest.java` |
+| `saga-orchestrator` | `src/test/java/com/equiflow/saga/SagaOrchestratorTest.java` |
+| `ledger-service` | `src/test/java/com/equiflow/ledger/LedgerServiceTest.java` ← **this ticket** |
+
+`LedgerService` is the only service in the project with no test file. `LedgerServiceConcurrencyTest` is the only second test file across any service — justified because concurrency requires a real Postgres container and must be kept separate from the Mockito unit tests that run without any infrastructure.
+
+All existing tests use the same structure: `@BeforeMethod` sets up mocks, `@Test` methods use TestNG assertions and `Mockito.verify`. `LedgerServiceTest` must follow this exact pattern.
+
 **Database Changes:** None — unit tests use Mockito; concurrency tests require Testcontainers (real Postgres needed for `SELECT FOR UPDATE` semantics — H2 does not enforce row-level locking)
 
 **Test Cases — `LedgerServiceTest` (unit, Mockito)**
