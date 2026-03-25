@@ -43,3 +43,6 @@ tests/e2e/test-results/
 
 # Docker volumes
 postgres_data/
+
+# Claude memory
+memory/

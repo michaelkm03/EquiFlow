@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,4 +29,7 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     List<Order> findActiveOrdersByTicker(String ticker);
 
     List<Order> findBySagaId(UUID sagaId);
+
+    @Query("SELECT o FROM Order o WHERE o.ticker = :ticker AND o.status = com.equiflow.order.model.enums.OrderStatus.PENDING_TRIGGER AND o.triggerPrice >= :currentPrice")
+    List<Order> findTriggeredStopLossOrders(String ticker, BigDecimal currentPrice);
 }

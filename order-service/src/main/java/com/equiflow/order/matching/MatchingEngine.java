@@ -65,11 +65,12 @@ public class MatchingEngine {
 
     private Order processMatches(Order order, List<OrderBook.MatchResult> matches) {
         if (matches.isEmpty()) {
-            if (order.getType() == OrderType.MARKET) {
-                // Market order with no liquidity - reject
+            if (order.getType() == OrderType.MARKET || order.getType() == OrderType.STOP_LOSS) {
+                // Market and triggered stop-loss orders with no liquidity - reject
+                // todo is this correct? should stop-loss orders be rejected if no liquidity, or just remain pending until they can be filled?
                 order.setStatus(OrderStatus.REJECTED);
                 order.setRejectionReason("No liquidity available for market order");
-                log.warn("Market order {} rejected: no liquidity", order.getId());
+                log.warn("{} order {} rejected: no liquidity", order.getType(), order.getId());
             } else {
                 order.setStatus(OrderStatus.OPEN);
             }

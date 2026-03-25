@@ -7,6 +7,13 @@
       "request": "attach",
       "hostName": "localhost",
       "port": 5005
+    },
+    {
+      "type": "java",
+      "name": "Attach to order-service (Docker)",
+      "request": "attach",
+      "hostName": "localhost",
+      "port": 5006
     }
   ]
 }

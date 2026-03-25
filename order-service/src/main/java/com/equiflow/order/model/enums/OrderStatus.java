@@ -8,5 +8,7 @@ public enum OrderStatus {
     PARTIALLY_FILLED,
     CANCELLED,
     REJECTED,
-    FAILED
+    FAILED,
+    PENDING_TRIGGER,
+    TRIGGERED
 }

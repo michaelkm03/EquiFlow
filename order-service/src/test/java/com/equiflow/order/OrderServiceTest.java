@@ -74,7 +74,7 @@ public class OrderServiceTest {
         when(matchingEngine.executeMarketOrder(any(Order.class))).thenReturn(filledOrder);
 
         OrderRequest request = new OrderRequest("AAPL", OrderSide.BUY, OrderType.MARKET,
-                new BigDecimal("10"), null);
+                new BigDecimal("10"), null, null);
 
         OrderResponse response = orderService.submitOrder(request, userId);
 
@@ -92,7 +92,7 @@ public class OrderServiceTest {
         when(marketHoursValidator.isMarketOpen()).thenReturn(false);
 
         OrderRequest request = new OrderRequest("AAPL", OrderSide.BUY, OrderType.MARKET,
-                new BigDecimal("10"), null);
+                new BigDecimal("10"), null, null);
 
         orderService.submitOrder(request, UUID.randomUUID());
     }
@@ -103,7 +103,7 @@ public class OrderServiceTest {
         when(marketHoursValidator.isMarketOpen()).thenReturn(true);
 
         OrderRequest request = new OrderRequest("AAPL", OrderSide.BUY, OrderType.LIMIT,
-                new BigDecimal("10"), null);
+                new BigDecimal("10"), null, null);
 
         orderService.submitOrder(request, UUID.randomUUID());
     }

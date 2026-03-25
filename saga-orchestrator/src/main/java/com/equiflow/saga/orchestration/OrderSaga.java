@@ -79,7 +79,16 @@ public class OrderSaga {
             return failSaga(saga, "Order rejected by compliance check");
         }
 
-        // Step 2: Match order in order book
+        // Step 2: Match order in order book — skip for STOP_LOSS (awaits price trigger)
+        String orderType = (String) orderEvent.get("type");
+        if ("STOP_LOSS".equals(orderType)) {
+            saga.setStatus("COMPLETED");
+            saga.setCurrentStep(5);
+            saga.setCompletedAt(Instant.now());
+            log.info("OrderSaga skipping execution for STOP_LOSS orderId={} — awaiting price trigger", saga.getOrderId());
+            return sagaRepository.save(saga);
+        }
+
         SagaStep step2 = executeStep(saga, 2, "ORDER_MATCHING", () ->
                 orderClient.triggerMatch(sagaRef.getOrderId())
         );

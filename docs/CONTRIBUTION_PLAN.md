@@ -40,6 +40,7 @@
 | ⚪ | <nobr>[EQ-111](#eq-111--fix-java-version-mismatch)</nobr> | Fix Java Version Mismatch — align pom.xml and README to Java 21 | 1 | P0 |
 | ⚪ | <nobr>[EQ-112](#eq-112--ledgerservice-test-coverage)</nobr> | LedgerService Test Coverage — hold, debit, release, concurrency paths | 5 | P0 |
 | ⚪ | <nobr>[EQ-113](#eq-113--saga-compensation--rollback)</nobr> | Saga Compensation — rollback ledger and order on saga failure | 8 | P0 |
+| ⚪ | <nobr>[EQ-114](#eq-114--remove-redundant-synchronous-order-matching-in-submitorder)</nobr> | Remove Redundant Synchronous Matching — order matching runs twice; saga must be the sole execution path | 3 | P1 |
 
 ### Backlog — Features
 | Status | Ticket | Feature | Points |
@@ -383,6 +384,41 @@ delivery channel (email, push) is out of scope for this story.
 - [ ] `failSaga()` calls `releaseHold()` on `LedgerService` if the debit step was reached
 - [ ] `failSaga()` calls `cancelOrder()` on `OrderService` if the matching step was reached
 - [ ] Compensation steps are idempotent — calling twice does not double-release or error
+
+---
+
+### EQ-114 · Remove Redundant Synchronous Order Matching in `submitOrder`
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 3 | P1 |
+
+**Problem:**
+`OrderService.submitOrder` calls the matching engine synchronously — inside the HTTP request handler — immediately after saving the order. The saga orchestrator then independently runs compliance and calls `orderClient.triggerMatch` in step 2, re-executing matching on an order that is already filled. This means:
+
+1. Orders can fill before compliance has run, inverting the intended compliance-first model.
+2. Saga step 2 (`ORDER_MATCHING`) is effectively a no-op or redundant re-execution for already-filled orders.
+3. The HTTP caller receives fill details in the immediate response, creating a false expectation of synchronous execution that is inconsistent with how STOP_LOSS orders behave.
+
+**Required Change:**
+Remove the `switch (request.getType())` block at the end of `OrderService.submitOrder` that calls `matchingEngine.executeMarketOrder` and `matchingEngine.executeLimitOrder`. The method should return the saved order in `PENDING` status. The saga owns all execution from that point — compliance first, then matching in step 2. Callers retrieve fill status by polling `GET /orders/{id}`.
+
+**Services Affected:**
+
+| Service | Change |
+|---------|--------|
+| `order-service` | Remove synchronous matching call from `submitOrder`; HTTP response returns order in `PENDING` status |
+| `saga-orchestrator` | No change — step 2 `triggerMatch` already handles execution correctly |
+
+**Database Changes:** None.
+
+**Kafka Topics:** None.
+
+**Acceptance Criteria:**
+- [ ] `POST /orders` returns the order in `PENDING` status for MARKET and LIMIT types; no fill data in the immediate response
+- [ ] The saga remains the only path that calls the matching engine for all order types
+- [ ] `GET /orders/{id}` returns `FILLED` / `PARTIALLY_FILLED` status after the saga completes
+- [ ] All existing `OrderService` unit tests pass with the synchronous matching block removed
+- [ ] A `MARKET` order submitted during NYSE hours reaches `FILLED` status via the saga within the async execution window
 
 ---
 

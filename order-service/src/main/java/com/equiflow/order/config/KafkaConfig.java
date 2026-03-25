@@ -31,4 +31,12 @@ public class KafkaConfig {
                 .replicas(1)
                 .build();
     }
+
+    @Bean
+    public NewTopic stopLossTriggeredTopic() {
+        return TopicBuilder.name("equiflow.order.stop-loss.triggered")
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }

@@ -18,7 +18,8 @@ import java.util.UUID;
     @Index(name = "idx_orders_user_id", columnList = "user_id"),
     @Index(name = "idx_orders_ticker", columnList = "ticker"),
     @Index(name = "idx_orders_status", columnList = "status"),
-    @Index(name = "idx_orders_saga_id", columnList = "saga_id")
+    @Index(name = "idx_orders_saga_id", columnList = "saga_id"),
+    @Index(name = "idx_orders_stop_loss", columnList = "ticker, status, trigger_price")
 })
 @Data
 @Builder
@@ -51,6 +52,9 @@ public class Order {
     @Column(name = "limit_price", precision = 18, scale = 4)
     private BigDecimal limitPrice;
 
+    @Column(name = "trigger_price", precision = 18, scale = 4)
+    private BigDecimal triggerPrice;
+
     @Column(name = "filled_price", precision = 18, scale = 4)
     private BigDecimal filledPrice;
 
@@ -81,12 +85,19 @@ public class Order {
         createdAt = Instant.now();
         updatedAt = Instant.now();
         if (status == null) {
-            status = OrderStatus.PENDING;
+            status = resolveInitialStatus();
         }
     }
 
     @PreUpdate
     protected void onUpdate() {
         updatedAt = Instant.now();
+    }
+
+    private OrderStatus resolveInitialStatus() {
+        return switch (type) {
+            case STOP_LOSS -> OrderStatus.PENDING_TRIGGER;
+            case LIMIT, MARKET -> OrderStatus.PENDING;
+        };
     }
 }
