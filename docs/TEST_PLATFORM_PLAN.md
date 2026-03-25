@@ -37,7 +37,7 @@ Use this file to:
 | 3 | ⚪ | [Stop-Loss Order Testing](#3-stop-loss-order-testing) | `StopLossOrderServiceTest` | Unit Test | None — EQ-101 complete | P0 |
 | 4 | ⚪ | [API Mocking / Contract Testing](#4-api-mocking--contract-testing) | `PortfolioSummaryContractTest` | Contract Test | Implement EQ-103 portfolio endpoint | P0 |
 | 5 | ⚪ | [E2E — Full Trade Lifecycle](#5-e2e--full-trade-lifecycle) | `trading-lifecycle.spec.ts` | E2E Test | None | P0 |
-| 6 | ⚪ | [CI/CD Pipeline](#6-cicd-pipeline) | `.github/workflows/ci.yml` | Infrastructure | None | P0 |
+| 6 | ✅ | [CI/CD Pipeline](#6-cicd-pipeline) | `.github/workflows/ci.yml` | Infrastructure | None | P0 |
 | — | ⚪ | [Infrastructure Changes](#infrastructure-changes) | WireMock, Testcontainers, CI profiles | Infra | None | P0 |
 
 ---
@@ -50,7 +50,7 @@ Use this file to:
 | 2 | Item 3 — `StopLossOrderServiceTest` | EQ-101 now complete — no prereqs remaining; write tests immediately |
 | 3 | Item 1 — Saga compensation | Highest interview impact; fixes critical production gap |
 | 4 | Item 5 — `trading-lifecycle.spec.ts` | No prereqs; first test to cross service boundaries |
-| 5 | Item 6 — CI pipeline | No prereqs; makes repo look production-ready immediately |
+| 5 | ~~Item 6 — CI pipeline~~ | ✅ Done |
 | 6 | EQ-103 + Item 4 — Portfolio contract test | WireMock differentiator; requires EQ-103 feature first |
 
 ---
@@ -215,7 +215,7 @@ when(marketDataClient.getPrice("AAPL")).thenReturn(155.00);
 
 **JD Requirement:** *"Deliver software in CI/CD environments supporting shift-left and continuous delivery. Familiarity with CI/CD pipelines (e.g., Argo, GitLab CI/CD)."*
 
-**Gap:** No CI pipeline exists. Tests must be run manually.
+**Status:** Implemented. `.github/workflows/ci.yml` runs `mvn clean verify` on every push and validates all Docker builds on PRs to master.
 
 **Prerequisite:** None.
 

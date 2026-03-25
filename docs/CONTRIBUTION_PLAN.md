@@ -11,8 +11,8 @@
 
 | Role | Name | Date |
 |------|------|------|
-| Product Owner | Claude | 2026-03-17 |
-| Engineering Lead | Michael Montgomery | 2026-03-17 |
+| Product Owner | Claude | 2026-03-25 |
+| Engineering Lead | Michael Montgomery | 2026-03-25 |
 
 > Stories in **Sprint 1** are approved and scheduled. Stories in the **Backlog**
 > are approved by product and engineering but not yet assigned to a sprint.

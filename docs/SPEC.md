@@ -47,7 +47,7 @@ The system simulates a production-grade brokerage backend with:
 
 **It is a pure REST API backend.** There is no UI. All interaction is via HTTP endpoints documented in Swagger at `http://localhost:8080/swagger-ui.html`.
 
-Everything runs locally via **Docker Compose**. No AWS, no Kubernetes, no CI/CD pipeline.
+Everything runs locally via **Docker Compose**. No AWS, no Kubernetes, no cloud deployment. CI runs via **GitHub Actions** on every push.
 
 **Scope (v1):** US equities (stocks) only. Mutual Funds, Bonds, and Slack notifications are out of scope for v1.
 
@@ -1904,6 +1904,7 @@ private static final Set<LocalDate> NYSE_HOLIDAYS_2026 = Set.of(
 | E2E | Playwright (API mode) | Full REST flows against the running local stack |
 | Performance | JMeter | 5000 concurrent AAPL orders against local stack |
 | Reporting | Allure Report | Visual dashboard, run locally via `allure serve` |
+| CI | GitHub Actions | Build + unit tests on every push; Docker image validation on PRs to master |
 
 > E2E (Playwright) and Performance (JMeter) tests require the full Docker Compose stack to be running.
 

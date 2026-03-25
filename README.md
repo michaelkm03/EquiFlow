@@ -1,5 +1,7 @@
 # EquiFlow
 
+[![CI](https://github.com/michaelkm03/EquiFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelkm03/EquiFlow/actions/workflows/ci.yml)
+
 A high-integrity US equity trading engine built with Java 21 and Spring Boot 3.x microservices. Simulates a production-grade brokerage backend with real order book matching, SEC/FINRA compliance enforcement, Saga-orchestrated distributed transactions, and chaos engineering support.
 
 > **Local development only.** No cloud deployment required.
