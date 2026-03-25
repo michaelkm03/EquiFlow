@@ -1,5 +1,5 @@
-# EquiFlow — SoFi Test Platform Alignment Plan
-**Role:** Senior Software Engineer — Test Platform | **Req ID:** 7507199003
+# EquiFlow — Test Platform Plan
+**Role:** Senior Software Engineer — Test Platform
 **Status:** EQ-101 implemented — stop-loss tests now unblocked | **Last Updated:** 2026-03-25
 
 > **Key facts verified in source before planning:**
@@ -14,13 +14,13 @@
 ## Test Case Reference
 
 A full flat breakdown of every test case in this plan is available in
-[`SOFI_TEST_CASES.csv`](SOFI_TEST_CASES.csv).
+[`TEST_CASES.csv`](TEST_CASES.csv).
 
-**Columns:** `Item` · `Test Class` · `Test Case` · `Type` · `Test Layer` · `Prereqs` · `Happy/Edge` · `SoFi JD Mapping` · `Setup` · `Assert`
+**Columns:** `Item` · `Test Class` · `Test Case` · `Type` · `Test Layer` · `Prereqs` · `Happy/Edge` · `JD Mapping` · `Setup` · `Assert`
 
 Use this file to:
 - Filter by `Happy/Edge` to review coverage balance per item
-- Filter by `SoFi JD Mapping` to see which JD requirement each test satisfies
+- Filter by `JD Mapping` to see which JD requirement each test satisfies
 - Filter by `Prereqs` to identify which tests can be written immediately vs which require feature work first
 - Track implementation status by adding a `Status` column as work progresses
 
@@ -30,7 +30,7 @@ Use this file to:
 
 ⚪ Not Started &nbsp;|&nbsp; 🔵 In Progress &nbsp;|&nbsp; ✅ Done
 
-| # | Status | SoFi Requirement | Planned Work | Type | Prereqs | Priority |
+| # | Status | Requirement | Planned Work | Type | Prereqs | Priority |
 |---|--------|-----------------|--------------|------|---------|----------|
 | 1 | ⚪ | [Saga Compensation](#1-saga-compensation) | `SagaCompensationIntegrationTest` | Integration Test | Add `cancelOrder()` to `OrderClient` | P0 |
 | 2 | ⚪ | [Ledger Concurrency](#2-ledger-concurrency) | `LedgerServiceTest` + `LedgerServiceConcurrencyTest` | Unit + Integration Test | None | P0 |
@@ -61,7 +61,7 @@ Use this file to:
 
 ### 1. Saga Compensation
 
-**SoFi JD:** *"Strong understanding of distributed systems architecture... Architect and implement solutions that accelerate integration and chaos testing."*
+**JD Requirement:** *"Strong understanding of distributed systems architecture... Architect and implement solutions that accelerate integration and chaos testing."*
 
 **Gap:** `failSaga()` marks the saga `FAILED` and saves — that's it. If the saga fails after placing a ledger hold (step 4 passes, step 5 throws), the user's funds are permanently frozen. `LedgerClient.release()` is already implemented but never called.
 
@@ -93,7 +93,7 @@ Without compensation: availableCash stays $98,500 forever  ❌
 
 ### 2. Ledger Concurrency
 
-**SoFi JD:** *"Proven programming skills in developing enterprise scale systems."*
+**JD Requirement:** *"Proven programming skills in developing enterprise scale systems."*
 
 **Gap:** `LedgerService` uses `SELECT FOR UPDATE` to prevent double-spend, but **no test directory exists** for `ledger-service`. If the lock is removed during a refactor, nothing catches it.
 
@@ -125,7 +125,7 @@ Without compensation: availableCash stays $98,500 forever  ❌
 
 ### 3. Stop-Loss Order Testing
 
-**SoFi JD:** *"Expertise in automated testing strategies... Design, develop, and maintain software that enables engineers to test backend applications."*
+**JD Requirement:** *"Expertise in automated testing strategies... Design, develop, and maintain software that enables engineers to test backend applications."*
 
 **Status:** EQ-101 is fully implemented. All prerequisites are met — tests can be written immediately.
 
@@ -157,7 +157,7 @@ Without compensation: availableCash stays $98,500 forever  ❌
 
 ### 4. API Mocking / Contract Testing
 
-**SoFi JD:** *"Expertise in automated testing strategies, testing in production, test tenancy, **API mocking, traffic capture, routing and playback technologies**."*
+**JD Requirement:** *"Expertise in automated testing strategies, testing in production, test tenancy, **API mocking, traffic capture, routing and playback technologies**."*
 
 **Gap:** No WireMock, MockServer, or contract tests anywhere in the project. All unit tests use in-process Mockito only. This is the single JD requirement with zero coverage.
 
@@ -191,7 +191,7 @@ when(marketDataClient.getPrice("AAPL")).thenReturn(155.00);
 
 ### 5. E2E — Full Trade Lifecycle
 
-**SoFi JD:** *"Deliver software that enables seamless testing of backend systems in cloud-native, containerized, and CI/CD environments, supporting shift-left and continuous delivery."*
+**JD Requirement:** *"Deliver software that enables seamless testing of backend systems in cloud-native, containerized, and CI/CD environments, supporting shift-left and continuous delivery."*
 
 **Gap:** `orders.spec.ts` submits an order and polls for a terminal status. No E2E test verifies what happens after a fill — ledger balance, settlement record, or audit log. The full system is never asserted end-to-end.
 
@@ -213,7 +213,7 @@ when(marketDataClient.getPrice("AAPL")).thenReturn(155.00);
 
 ### 6. CI/CD Pipeline
 
-**SoFi JD:** *"Deliver software in CI/CD environments supporting shift-left and continuous delivery. Familiarity with CI/CD pipelines (e.g., Argo, GitLab CI/CD)."*
+**JD Requirement:** *"Deliver software in CI/CD environments supporting shift-left and continuous delivery. Familiarity with CI/CD pipelines (e.g., Argo, GitLab CI/CD)."*
 
 **Gap:** No CI pipeline exists. Tests must be run manually.
 
@@ -239,7 +239,7 @@ Triggers: `push` and `pull_request` to `master`. README displays live CI badge.
 
 These changes are required to support the test work above. None involves modifying production application logic.
 
-| Change | File | Purpose | SoFi Requirement |
+| Change | File | Purpose | Requirement |
 |--------|------|---------|-----------------|
 | Add WireMock container | `docker-compose.yml` | Stub external HTTP services at container level for local + CI testing | API mocking / test tenancy |
 | Add Testcontainers to `ledger-service` pom | `ledger-service/pom.xml` | Real Postgres required for `SELECT FOR UPDATE` concurrency tests — H2 does not enforce the same locking semantics | Distributed systems testing |
@@ -250,7 +250,7 @@ These changes are required to support the test work above. None involves modifyi
 
 ---
 
-## SoFi JD Coverage Summary
+## JD Coverage Summary
 
 | JD Requirement | Covered By |
 |----------------|-----------|

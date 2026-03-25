@@ -1,4 +1,4 @@
-Item,Test Class,Test Case,Type,Test Layer,Prereqs,Happy/Edge,SoFi JD Mapping,Setup,Assert
+Item,Test Class,Test Case,Type,Test Layer,Prereqs,Happy/Edge,JD Mapping,Setup,Assert
 1,SagaCompensationIntegrationTest,happyPath_allStepsComplete,Integration,Testcontainers (Postgres + Kafka),Add cancelOrder() to OrderClient,Happy,Distributed systems architecture,All 5 saga steps succeed with mocked downstream services,Saga status = COMPLETED; hold converted to debit; availableCash reduced by fill value
 1,SagaCompensationIntegrationTest,failAtSettlement_holdIsReleased,Integration,Testcontainers (Postgres + Kafka),Add cancelOrder() to OrderClient,Edge,Distributed systems — failure handling,Steps 1–4 pass; settlementClient.createSettlement() throws RuntimeException,ledgerClient.release() called; availableCash fully restored to pre-order value
 1,SagaCompensationIntegrationTest,failAtMatching_noHoldPlaced,Integration,Testcontainers (Postgres + Kafka),Add cancelOrder() to OrderClient,Edge,Distributed systems — failure handling,Compliance passes; orderClient.triggerMatch() throws RuntimeException,No hold placed; availableCash unchanged; saga status = FAILED
