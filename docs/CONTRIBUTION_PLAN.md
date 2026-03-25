@@ -36,7 +36,7 @@
 ### Sprint 1 — Infrastructure and Tech Debt
 | Status | Ticket | Task | Points | Priority |
 |--------|--------|------|--------|----------|
-| ⚪ | <nobr>[EQ-110](#eq-110--ci-pipeline-github-actions)</nobr> | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
+| ✅ | <nobr>[EQ-110](#eq-110--ci-pipeline-github-actions)</nobr> | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
 | ✅ | <nobr>[EQ-111](#eq-111--fix-java-version-mismatch)</nobr> | Fix Java Version Mismatch — align pom.xml and README to Java 21 | 1 | P0 |
 | ⚪ | <nobr>[EQ-112](#eq-112--ledgerservice-test-coverage)</nobr> | LedgerService Test Coverage — hold, debit, release, concurrency paths | 5 | P0 |
 | ⚪ | <nobr>[EQ-113](#eq-113--saga-compensation--rollback)</nobr> | Saga Compensation — rollback ledger and order on saga failure | 8 | P0 |
