@@ -413,20 +413,84 @@ The HTML report shows each class with **line coverage %** (lines executed ÷ tot
 |------|------|--------|----------|
 | Platform | Engineering | 8 | P0 |
 
+**Current State (gap to fix):**
+
+`OrderSaga.failSaga()` today only sets `saga.status = FAILED` and saves. No compensation runs. Specifically:
+- Step 2 failure comment reads `// Compensate: nothing to undo for matching yet`
+- Step 3 failure calls `failSaga()` with no hold release
+- Step 4 (Settlement) has no failure handling at all — silently falls through to `COMPLETED`
+
 **Services Affected:**
 
 | Service | Change |
 |---------|--------|
-| `saga-orchestrator` | Add `compensate()` method to `OrderSaga`; invoke rollback steps in reverse order on failure |
-| `ledger-service` | `releaseHold()` must be idempotent — safe to call if no hold exists |
-| `order-service` | `cancelOrder()` must be idempotent — safe to call on an already-cancelled order |
+| `saga-orchestrator` | Extend `failSaga()` to run compensation based on `saga.getCurrentStep()`; add `cancelOrder()` to `OrderClient` |
+| `order-service` | Make `cancelOrder()` idempotent — currently throws `IllegalStateException` if order is already in a terminal state |
+| `ledger-service` | `release()` is already idempotent (floors `cashOnHold` at zero) — no change needed |
 
-**Kafka Topics:** No new topics; compensation actions are synchronous Feign calls.
+**Kafka Topics:** No new topics. Compensation is synchronous Feign calls.
+
+**Implementation — `OrderSaga`:**
+
+`failSaga()` must inspect `saga.getCurrentStep()` and compensate in reverse:
+
+| Step that failed | Compensation required |
+|------------------|-----------------------|
+| 1 — COMPLIANCE_CHECK | None (nothing executed yet) |
+| 2 — ORDER_MATCHING | Cancel order via `orderClient.cancelOrder(saga.getOrderId())` |
+| 3 — LEDGER_DEBIT | Cancel order + release hold via `ledgerClient.release(userId, orderId)` |
+| 4 — SETTLEMENT_CREATE | Cancel order + release hold + reverse debit (complex — see note below) |
+
+Step 4 reversal (debit already committed) is the hardest case. For this ticket, log the failure and mark the saga `COMPENSATION_REQUIRED` for manual intervention rather than attempting an automated debit reversal.
+
+**Implementation — `OrderClient`:**
+
+Currently only has `triggerMatch()`. Add:
+```java
+@DeleteMapping("/orders/{orderId}/cancel")
+Map<String, Object> cancelOrder(@PathVariable("orderId") UUID orderId);
+```
+The existing `DELETE /orders/{orderId}` endpoint on `order-service` maps to `OrderService.cancelOrder(orderId, userId)`. The saga needs a system-level cancel that bypasses the userId ownership check — either add a separate internal endpoint, or pass the order's `userId` from the saga context (already available on `Saga.getUserId()`).
+
+**Implementation — `OrderService.cancelOrder` idempotency:**
+
+Currently throws if order is already `CANCELLED`, `FILLED`, or `REJECTED`. For compensation safety, return silently if already in a terminal state:
+```java
+if (order.getStatus() == OrderStatus.CANCELLED) return toResponse(order); // already done
+```
+
+**Compensation flow in `failSaga()`:**
+```
+failSaga(saga, reason)
+  ├── if currentStep >= 2: orderClient.cancelOrder(orderId)      [catch + log, don't rethrow]
+  ├── if currentStep >= 3: ledgerClient.release(userId, orderId) [catch + log, don't rethrow]
+  ├── if currentStep >= 4: log COMPENSATION_REQUIRED — manual    [out of automated scope]
+  └── saga.status = FAILED, save
+```
+Each compensation call is wrapped in its own try/catch — a failed compensation step must not prevent the others from running or prevent the saga from reaching `FAILED` status.
 
 **Acceptance Criteria:**
-- [ ] `failSaga()` calls `releaseHold()` on `LedgerService` if the debit step was reached
-- [ ] `failSaga()` calls `cancelOrder()` on `OrderService` if the matching step was reached
-- [ ] Compensation steps are idempotent — calling twice does not double-release or error
+- [ ] `failSaga()` calls `orderClient.cancelOrder()` when `currentStep >= 2`
+- [ ] `failSaga()` calls `ledgerClient.release()` when `currentStep >= 3`
+- [ ] Step 4 failure logs `COMPENSATION_REQUIRED` and sets saga status accordingly
+- [ ] `OrderService.cancelOrder()` is idempotent — no exception if already `CANCELLED`
+- [ ] A compensation failure (e.g. ledger-service down) is logged but does not mask the original failure reason
+- [ ] Saga ends in `FAILED` status regardless of whether compensation succeeds
+
+**Test Cases — `SagaCompensationTest` (unit, Mockito):**
+
+| Scenario | Mock setup | Assert |
+|----------|------------|--------|
+| Compliance fails (step 1) | `complianceClient.check()` throws | `saga.status = FAILED`; no cancel, no release called |
+| Matching fails (step 2) | `orderClient.triggerMatch()` throws | `saga.status = FAILED`; `cancelOrder()` called once |
+| Debit fails (step 3) | `ledgerClient.debit()` throws | `saga.status = FAILED`; `cancelOrder()` + `release()` both called |
+| Settlement fails (step 4) | `settlementClient.createSettlement()` throws | `saga.status = FAILED`; `cancelOrder()` + `release()` called; `COMPENSATION_REQUIRED` logged |
+| Cancel compensation itself fails | `orderClient.cancelOrder()` throws | `release()` still called; saga still reaches `FAILED` |
+
+Run tests:
+```bash
+mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest
+```
 
 ---
 
