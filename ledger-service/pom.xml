@@ -83,6 +83,11 @@
             <artifactId>mockito-core</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -90,6 +95,20 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- api.version = system property read by docker-java DefaultDockerClientConfig for DOCKER_API_VERSION -->
+                    <argLine>@{argLine} --enable-preview -Dapi.version=1.44</argLine>
+                    <environmentVariables>
+                        <!-- docker_engine_linux = WSL2 engine pipe; required by Testcontainers on Docker Desktop 4.x+ -->
+                        <DOCKER_HOST>npipe:////./pipe/docker_engine_linux</DOCKER_HOST>
+                        <!-- Also set as env var as a belt-and-suspenders fallback -->
+                        <DOCKER_API_VERSION>1.44</DOCKER_API_VERSION>
+                    </environmentVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>

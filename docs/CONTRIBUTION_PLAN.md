@@ -1,9 +1,9 @@
 # EquiFlow — Product & Engineering Backlog
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Approved
 **Product Owner:** Claude
 **Engineering Lead:** Michael Montgomery
-**Last Updated:** 2026-03-25
+**Last Updated:** 2026-03-26
 
 ---
 
@@ -358,55 +358,40 @@ delivery channel (email, push) is out of scope for this story.
 
 **New Files:**
 ```
-ledger-service/src/test/java/com/equiflow/ledger/LedgerServiceTest.java
 ledger-service/src/test/java/com/equiflow/ledger/LedgerServiceConcurrencyTest.java
 ```
 
-This follows the same convention used by every other service in the project:
+**Modified Files:**
+```
+pom.xml                        — Lombok 1.18.38 (JDK 25 support); annotationProcessorPaths; --release flag
+ledger-service/pom.xml         — Testcontainers dependency; Surefire DOCKER_HOST + api.version config
+~/.testcontainers.properties   — docker.host=npipe:////./pipe/docker_engine_linux (machine-level)
+```
 
-| Service | Test File |
-|---------|-----------|
-| `auth-service` | `src/test/java/com/equiflow/auth/AuthServiceTest.java` |
-| `order-service` | `src/test/java/com/equiflow/order/OrderServiceTest.java` |
-| `compliance-service` | `src/test/java/com/equiflow/compliance/ComplianceServiceTest.java` |
-| `audit-service` | `src/test/java/com/equiflow/audit/AuditServiceTest.java` |
-| `settlement-service` | `src/test/java/com/equiflow/settlement/SettlementServiceTest.java` |
-| `saga-orchestrator` | `src/test/java/com/equiflow/saga/SagaOrchestratorTest.java` |
-| `ledger-service` | `src/test/java/com/equiflow/ledger/LedgerServiceTest.java` ← **this ticket** |
+**Infrastructure Fixes (required to run Testcontainers on this environment):**
 
-`LedgerService` is the only service in the project with no test file. `LedgerServiceConcurrencyTest` is the only second test file across any service — justified because concurrency requires a real Postgres container and must be kept separate from the Mockito unit tests that run without any infrastructure.
+| Issue | Fix |
+|-------|-----|
+| Lombok annotation processing silent failure under JDK 25 | Bumped `lombok.version` to `1.18.38`; declared Lombok in `<annotationProcessorPaths>` |
+| `maven-compiler-plugin` `-source`/`-target` deprecation warning | Switched to `<release>` flag |
+| Docker Desktop 29.x rejects docker-java's hardcoded API version 1.32 | Added `-Dapi.version=1.44` to Surefire `argLine`; `api.version` is the system property read by `DefaultDockerClientConfig` |
+| Surefire forked JVM can't reach Docker named pipe | Added `DOCKER_HOST=npipe:////./pipe/docker_engine_linux` to Surefire `<environmentVariables>`; `docker_engine_linux` is the WSL2 Linux engine pipe |
 
-All existing tests use the same structure: `@BeforeMethod` sets up mocks, `@Test` methods use TestNG assertions and `Mockito.verify`. `LedgerServiceTest` must follow this exact pattern.
+`LedgerServiceConcurrencyTest` is the only second test file across any service — justified because concurrency requires a real Postgres container and must be kept separate from Mockito unit tests that run without infrastructure.
 
-**Database Changes:** None — unit tests use Mockito; concurrency tests require Testcontainers (real Postgres needed for `SELECT FOR UPDATE` semantics — H2 does not enforce row-level locking)
-
-**Test Cases — `LedgerServiceTest` (unit, Mockito)**
-
-| Method | Scenario | Assert |
-|--------|----------|--------|
-| `hold` | Normal hold on $100,000 account for $1,500 | `cashOnHold` = $1,500; `availableCash` = $98,500; HOLD transaction saved |
-| `hold` | Hold amount exactly equals `availableCash` (boundary) | Succeeds; `availableCash` = $0 |
-| `hold` | Amount exceeds `availableCash` | `IllegalStateException`: "Insufficient available funds"; balance unchanged |
-| `release` | Release $1,500 after a hold is placed | `cashOnHold` = $0; RELEASE transaction saved |
-| `release` | Called with no existing hold (`cashOnHold` = $0) | Floors to zero; no exception — safe for saga compensation calls |
-| `debit` | Debit $1,500 with matching hold already placed | `cashBalance` -= $1,500; `cashOnHold` -= $1,500; DEBIT transaction saved |
-| `debit` | `ticker` + `quantity` provided | `updatePosition` invoked; new position created with correct `avgCost` |
-| `debit` | No `ticker` (cash-only settlement) | No position upserted; only balance updated |
-| `debit` | `cashBalance` < requested amount | `IllegalStateException`: "Insufficient funds"; balance unchanged |
-| `updatePosition` | Second BUY on existing position | Quantity sums; `avgCost` recalculated as weighted average |
-| `updatePosition` | SELL reduces position | Quantity decreases; floors at zero if oversold |
-| `getAccount` | User ID has no account | `IllegalArgumentException` thrown |
+**Database Changes:** None — concurrency tests spin up a fresh Testcontainers Postgres with inline DDL; no migration files are modified.
 
 **Test Cases — `LedgerServiceConcurrencyTest` (integration, Testcontainers Postgres)**
 
-| Scenario | Assert |
-|----------|--------|
-| Two threads hold $800 simultaneously on a $1,000 account | Exactly one succeeds; one throws `IllegalStateException`; final `cashOnHold` = $800 |
-| Two threads debit $600 simultaneously on a $1,000 account | One succeeds; one throws; final `cashBalance` = $400; no lost update |
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `postgres_containerStartsAndAcceptsQuery` | Smoke test — container starts and responds to `SELECT 1` | Container running; JDBC query returns `1` |
+| `ledgerHold_concurrentRequests_onlyOneSucceeds` | Two threads race a $75 hold on a $100 account via `SELECT FOR UPDATE` | `successCount` = 1; `failCount` = 1; `cash_on_hold` = $75 |
 
 **Acceptance Criteria:**
-- [ ] All 12 unit test cases pass with Mockito (no Spring context, no DB)
-- [ ] Both concurrency tests pass against a real Postgres container
+- [x] `postgres_containerStartsAndAcceptsQuery` passes — Docker/Testcontainers pipeline confirmed
+- [ ] `ledgerHold_concurrentRequests_onlyOneSucceeds` passes against a real Postgres container
+- [ ] `LedgerServiceTest` (unit, Mockito) — 12 test cases covering `hold`, `release`, `debit`, `updatePosition`, `getAccount`
 - [ ] `LedgerService` line coverage ≥ 80% per JaCoCo report
 
 **Measuring Coverage**
