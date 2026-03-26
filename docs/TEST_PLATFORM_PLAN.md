@@ -33,7 +33,7 @@ Use this file to:
 | # | Status | Requirement | Planned Work | Type | Prereqs | Priority |
 |---|--------|-----------------|--------------|------|---------|----------|
 | 1 | ⚪ | [Saga Compensation](#1-saga-compensation) | `SagaCompensationIntegrationTest` | Integration Test | Add `cancelOrder()` to `OrderClient` | P0 |
-| 2 | ⚪ | [Ledger Concurrency](#2-ledger-concurrency) | `LedgerServiceTest` + `LedgerServiceConcurrencyTest` | Unit + Integration Test | None | P0 |
+| 2 | 🔵 | [Ledger Concurrency](#2-ledger-concurrency) | `LedgerServiceTest` + `LedgerServiceConcurrencyTest` | Unit + Integration Test | None | P0 |
 | 3 | ⚪ | [Stop-Loss Order Testing](#3-stop-loss-order-testing) | `StopLossOrderServiceTest` | Unit Test | None — EQ-101 complete | P0 |
 | 4 | ⚪ | [API Mocking / Contract Testing](#4-api-mocking--contract-testing) | `PortfolioSummaryContractTest` | Contract Test | Implement EQ-103 portfolio endpoint | P0 |
 | 5 | ⚪ | [E2E — Full Trade Lifecycle](#5-e2e--full-trade-lifecycle) | `trading-lifecycle.spec.ts` | E2E Test | None | P0 |
@@ -46,7 +46,7 @@ Use this file to:
 
 | Order | Item | Reason |
 |-------|------|--------|
-| 1 | Item 2 — `LedgerServiceTest` | No prereqs; only service with zero tests; unblocks item 1 |
+| 1 | ~~Item 2 — `LedgerServiceTest`~~ | ✅ 11 unit tests written — `LedgerServiceConcurrencyTest` (Testcontainers) still remaining |
 | 2 | Item 3 — `StopLossOrderServiceTest` | EQ-101 now complete — no prereqs remaining; write tests immediately |
 | 3 | Item 1 — Saga compensation | Highest interview impact; fixes critical production gap |
 | 4 | Item 5 — `trading-lifecycle.spec.ts` | No prereqs; first test to cross service boundaries |
