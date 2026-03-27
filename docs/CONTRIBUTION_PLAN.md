@@ -3,7 +3,7 @@
 **Status:** Approved
 **Product Owner:** Claude
 **Engineering Lead:** Michael Montgomery
-**Last Updated:** 2026-03-26
+**Last Updated:** 2026-03-27
 
 ---
 
@@ -39,7 +39,11 @@
 | ✅ | <nobr>[EQ-110](#eq-110--ci-pipeline-github-actions)</nobr> | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
 | ✅ | <nobr>[EQ-111](#eq-111--fix-java-version-mismatch)</nobr> | Fix Java Version Mismatch — align pom.xml and README to Java 21 | 1 | P0 |
 | ✅ | <nobr>[EQ-112](#eq-112--ledgerservice-test-coverage)</nobr> | LedgerService Test Coverage — hold, debit, release, concurrency paths | 5 | P0 |
-| ⚪ | <nobr>[EQ-113](#eq-113--saga-compensation--rollback)</nobr> | Saga Compensation — rollback ledger and order on saga failure | 8 | P0 |
+| ⚪ | <nobr>[EQ-113a](#eq-113a--compensating-status--recovery-job)</nobr> | Compensating Status + Recovery Job — crash-safe COMPENSATING checkpoint and scheduled recovery | 2 | P0 |
+| ⚪ | <nobr>[EQ-113b](#eq-113b--compensation-feign-calls--idempotency-fixes)</nobr> | Compensation Feign Calls + Idempotency — cancel/release steps wired in failSaga(); both services made idempotent | 3 | P0 — depends on EQ-113a |
+| ⚪ | <nobr>[EQ-115](#eq-115--saga-settlement-failure--manual-reconciliation)</nobr> | Settlement Failure Handling — step 4 guard, COMPENSATION_REQUIRED status, ops Kafka alert, credit endpoint | 3 | P0 — depends on EQ-113b |
+| ⚪ | <nobr>[EQ-116a](#eq-116a--unit-idempotency-tests)</nobr> | Unit Idempotency Tests — release() and cancelOrder() idempotency cases added to existing test files | 2 | P0 — depends on EQ-113b |
+| ⚪ | <nobr>[EQ-116b](#eq-116b--saga-data-integrity-test-suite)</nobr> | Data Integrity Test Suite — Testcontainers end-to-end assertion of all three service DBs per compensation scenario | 3 | P0 — depends on EQ-115, EQ-116a |
 | ⚪ | <nobr>[EQ-114](#eq-114--remove-redundant-synchronous-order-matching-in-submitorder)</nobr> | Remove Redundant Synchronous Matching — order matching runs twice; saga must be the sole execution path | 3 | P1 |
 
 ### Backlog — Features
@@ -408,88 +412,363 @@ The HTML report shows each class with **line coverage %** (lines executed ÷ tot
 
 ---
 
-### EQ-113 · Saga Compensation / Rollback
+### EQ-113a · Compensating Status + Recovery Job
 | Epic | Type | Points | Priority |
 |------|------|--------|----------|
-| Platform | Engineering | 8 | P0 |
+| Platform | Engineering | 2 | P0 |
 
-**Current State (gap to fix):**
+> **Scope note:** This ticket covers crash-safety infrastructure only — the COMPENSATING status checkpoint and the scheduled recovery job. No Feign calls are wired here. EQ-113b adds the actual cancel/release steps and idempotency fixes.
 
-`OrderSaga.failSaga()` today only sets `saga.status = FAILED` and saves. No compensation runs. Specifically:
-- Step 2 failure comment reads `// Compensate: nothing to undo for matching yet`
-- Step 3 failure calls `failSaga()` with no hold release
-- Step 4 (Settlement) has no failure handling at all — silently falls through to `COMPLETED`
+**What's in this ticket:**
+1. `failSaga()` sets `saga.status = COMPENSATING` and saves before any Feign call — the crash-safe boundary.
+2. `SagaRecoveryJob` — new `@Scheduled` class, runs every 60 seconds, queries sagas in COMPENSATING state older than 2 minutes.
+3. `getSagasByStatus("COMPENSATING")` query used by the recovery job (method already exists on the service — wire it in).
+
+**Recovery job logic:**
+- For each stuck saga: read existing `SagaStep` records.
+- Skip any step that has a `COMPENSATION_*` SagaStep with status=COMPLETED.
+- Delegate re-compensation to the same method EQ-113b will implement — recovery job and normal failure path share the same compensation entry point.
+
+**Services Affected:** `saga-orchestrator` only.
+
+**Acceptance Criteria:**
+- [ ] `failSaga()` writes COMPENSATING to the DB before any downstream call; verifiable by killing the pod immediately after and checking the DB row
+- [ ] `SagaRecoveryJob` is registered as a `@Scheduled` bean and logs a scan entry on each run
+- [ ] Recovery job skips sagas in COMPENSATING state for fewer than 2 minutes
+- [ ] Recovery job skips completed compensation steps; only re-runs missing ones
+
+**Test Cases — `SagaRecoveryJobTest` (unit, Mockito):**
+
+| Scenario | Mock setup | Assert |
+|----------|------------|--------|
+| No stuck sagas | `getSagasByStatus` returns empty | No compensation called |
+| Saga stuck < 2 min | Saga created 90s ago | Skipped — not yet eligible |
+| Saga stuck > 2 min, no completed steps | Saga created 3 min ago; no SagaSteps | Compensation entry point called |
+| Saga stuck > 2 min, cancel already completed | COMPENSATION_CANCEL SagaStep=COMPLETED present | Cancel skipped; release still called |
+
+```bash
+mvn test -pl saga-orchestrator -Dtest=SagaRecoveryJobTest
+```
+
+---
+
+### EQ-113b · Compensation Feign Calls + Idempotency Fixes
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 3 | P0 — depends on EQ-113a |
+
+> **Scope note:** Wires the actual cancel and release compensation steps into `failSaga()`. Adds idempotency to both target services. Step 4 failure (settlement) is EQ-115.
+
+> **Scope note (original EQ-113):** EQ-113a + EQ-113b together cover steps 1–3 compensation (cancel order, release hold) and crash-safety. Step 4 (settlement failure / debit reversal) is EQ-115. Data integrity test suite is EQ-116a + EQ-116b.
+
+---
+
+**Current gaps:**
+
+| Gap | Location | Impact |
+|-----|----------|--------|
+| `failSaga()` does nothing except set status | `OrderSaga.java` | Orders left in PENDING/unknown state; holds never released |
+| Step 2 failure has a comment `// nothing to undo yet` | `OrderSaga.java` | Order record left in PENDING after saga fails |
+| Step 4 has no failure check at all | `OrderSaga.java` | Settlement failure silently falls through to `COMPLETED` — data integrity bug |
+| `OrderClient` has no `cancelOrder()` | `OrderClient.java` | Cannot cancel orders from saga |
+| `LedgerService.release()` is not idempotent | `LedgerService.java` | Calling twice subtracts hold twice; second call not a no-op |
+| No hold is placed anywhere in the saga | `OrderSaga.java` | `release()` compensation has no hold to release — flagged as existing gap |
+| `SagaService.getActiveSagas()` only returns STARTED | `SagaService.java` | COMPENSATING sagas after pod restart are never recovered |
+
+---
+
+**Definitions (used throughout this ticket):**
+
+| Term | Meaning |
+|------|---------|
+| **Cancel Order** | Set order status → `CANCELLED` in order-service. Publishes `order.cancelled` Kafka event. No-op if already `CANCELLED` or `REJECTED`. Alerts if order is `FILLED` (that is a data integrity problem, not a duplicate). |
+| **Release Hold** | Reduce `cash_on_hold` in ledger-service by the hold amount for this order. Uses `orderId` as idempotency key — checks `ledger_transactions` for existing RELEASE record first. If record exists, returns account state without modifying balances. |
+| **Both** | Cancel Order, then Release Hold. Each runs independently — failure of one does not block the other. |
+
+**When each applies:**
+
+| Step failed | Cancel Order | Release Hold | Rationale |
+|-------------|-------------|-------------|-----------|
+| Step 1 — Compliance | No | No | Nothing executed. Order never reached order-service matching. |
+| Step 2 — Matching | Yes | No | Order record exists in order-service in an ambiguous state. Hold may not exist (see gap above). Normalise to `CANCELLED`. |
+| Step 3 — Debit | Yes | Yes | Order matched. Hold exists (if hold was placed). Debit failed so funds are still frozen in `cash_on_hold`. |
+
+---
+
+**Scenario 1 — Compliance fails**
+
+Alice submits a buy order for a stock she sold at a loss 20 days ago. Compliance rejects it.
+
+- The saga never called the matching engine. No order state change occurred beyond `PENDING`.
+- No Cancel. No Release.
+- `failSaga()` sets `saga.status = FAILED`, records the compliance rejection reason, and saves.
+- The order in order-service stays `PENDING`. A follow-on task (outside this ticket) should transition it to `REJECTED` to make the state user-visible — flagged but not in scope here.
+- **Kafka:** No compensation events. Saga failure is logged.
+- **Audit:** `SagaStep` for COMPLIANCE_CHECK records status=FAILED and the rejection message. Audit-service reads this from the saga DB.
+
+---
+
+**Scenario 2 — Matching fails**
+
+Bob places a limit buy. The matching engine finds no sellers and the Feign call throws.
+
+**Why not leave the order as-is:**
+The order is in `PENDING` (saga's view) or `REJECTED` (if the matching engine set it before throwing). `PENDING` is an active-waiting state — leaving it there after a saga failure misleads users and any system that polls for pending orders. `REJECTED` is already terminal but was set by the engine, not the saga; the saga should still explicitly record its compensation action for audit completeness.
+
+- Order status after matching failure is uncertain (PENDING or REJECTED depending on where the engine failed).
+- Compensation: **Cancel Order**
+  - If already `CANCELLED`: silent no-op (idempotent).
+  - If `REJECTED`: silent no-op — treat as already terminal, do not overwrite (order was rejected by the engine, which is a valid terminal state).
+  - If `FILLED`: **do not cancel** — log `WARN compensation_anomaly orderId={} status=FILLED` and alert ops. A FILLED order during a failed saga is a data integrity issue requiring investigation, not automated cancellation.
+  - If `PENDING` or `OPEN`: cancel normally.
+- `failSaga()` sets `saga.status = FAILED`.
+- **Kafka:** `order.cancelled` published by order-service if cancel ran. No new topics.
+- **Audit:** `COMPENSATION_CANCEL` SagaStep recorded with outcome (COMPLETED or FAILED).
+- **If order-service is down:** Feign call times out (configured timeout: 5s). Catch, log `ERROR compensation_cancel_failed orderId={} reason={}`, continue to `FAILED`. Hold is not applicable here. Saga reaches `FAILED`. Ops can manually cancel the order via the existing `DELETE /orders/{id}` endpoint.
+
+---
+
+**Scenario 3 — Debit fails**
+
+Carol's order matched. The saga moves to debit her account. `ledger-service` is briefly down — Feign call times out.
+
+This is the most important scenario. The order is now in a matched/filled state, and a hold (if placed) is frozen on Carol's account.
+
+- Compensation: **Cancel Order + Release Hold** (in that order, independently)
+- **Cancel Order:** same rules as Scenario 2.
+- **Release Hold:**
+  - Calls `ledgerClient.release({ userId, orderId, amount })`.
+  - Before reducing `cash_on_hold`, `LedgerService.release()` checks `ledger_transactions` for an existing RELEASE record with this `orderId`. If found, returns current account state — no balance change. This is the primary idempotency guard.
+  - If no existing record, proceeds to reduce `cash_on_hold` and write the RELEASE transaction.
+- Each call is in its own try/catch. If cancel fails, release still runs. If release fails, saga still reaches `FAILED`.
+- **Double-cancel prevention (three layers):**
+  1. `OrderService.cancelOrder()` returns silently for `CANCELLED` and `REJECTED` orders.
+  2. Before calling cancel, `failSaga()` checks existing `SagaStep` records — if `COMPENSATION_CANCEL` already exists with status=COMPLETED, skip the call.
+  3. The `orderId` is the natural DB-level idempotency key for all compensation records.
+- **What if cancel step fails:**
+  - Log `ERROR compensation_cancel_failed orderId={} userId={} reason={}`.
+  - Continue to release hold — do not abort.
+  - Record `COMPENSATION_CANCEL` SagaStep with status=FAILED.
+  - Ops can manually cancel via `DELETE /orders/{id}`.
+- **What if release step fails:**
+  - Log `ERROR compensation_release_failed orderId={} userId={} amount={} reason={}` — include enough to manually re-run.
+  - Record `COMPENSATION_RELEASE` SagaStep with status=FAILED.
+  - Carol's `cash_on_hold` remains frozen. Ops can manually call `POST /ledger/release` with the orderId — the idempotency key ensures this is safe regardless of whether the automated attempt partially ran.
+  - Saga reaches `FAILED`.
+- **Kafka:** `order.cancelled` (if cancel ran). No new topic for release — recorded in ledger_transactions.
+- **Audit:** Two SagaSteps: `COMPENSATION_CANCEL` and `COMPENSATION_RELEASE`, each with their own status and error message.
+- **High volume / DB lock scenario:** `LedgerService.release()` uses `SELECT FOR UPDATE` (same as `hold()`). Under high contention, the second concurrent request for the same account row will queue behind the first. The idempotency check (`existsByOrderIdAndType`) runs inside the same `@Transactional` block, so whichever thread wins the lock checks first and the other finds the record already written. No double-release can occur.
+
+---
+
+**Saga status values:**
+
+| Status | Meaning |
+|--------|---------|
+| `STARTED` | Saga in progress |
+| `COMPLETED` | All steps succeeded |
+| `COMPENSATING` | Failure detected; compensation running or pending recovery |
+| `FAILED` | Compensation completed (fully or partially); saga terminal |
+| `COMPENSATION_REQUIRED` | Step 4 — debit already committed; automated reversal not possible; manual action required (EQ-115) |
+
+---
 
 **Services Affected:**
 
 | Service | Change |
 |---------|--------|
-| `saga-orchestrator` | Extend `failSaga()` to run compensation based on `saga.getCurrentStep()`; add `cancelOrder()` to `OrderClient` |
-| `order-service` | Make `cancelOrder()` idempotent — currently throws `IllegalStateException` if order is already in a terminal state |
-| `ledger-service` | `release()` is already idempotent (floors `cashOnHold` at zero) — no change needed |
+| `saga-orchestrator` | Extend `failSaga()` with compensation steps (cancel + release); add `cancelOrder()` to `OrderClient`; COMPENSATING status + SagaRecoveryJob in EQ-113a |
+| `order-service` | Add system-level cancel endpoint; make `cancelOrder()` handle terminal states per rules above |
+| `ledger-service` | Add `existsByOrderIdAndType` to `LedgerTransactionRepository`; add idempotency guard to `LedgerService.release()` |
 
-**Kafka Topics:** No new topics. Compensation is synchronous Feign calls.
-
-**Implementation — `OrderSaga`:**
-
-`failSaga()` must inspect `saga.getCurrentStep()` and compensate in reverse:
-
-| Step that failed | Compensation required |
-|------------------|-----------------------|
-| 1 — COMPLIANCE_CHECK | None (nothing executed yet) |
-| 2 — ORDER_MATCHING | Cancel order via `orderClient.cancelOrder(saga.getOrderId())` |
-| 3 — LEDGER_DEBIT | Cancel order + release hold via `ledgerClient.release(userId, orderId)` |
-| 4 — SETTLEMENT_CREATE | Cancel order + release hold + reverse debit (complex — see note below) |
-
-Step 4 reversal (debit already committed) is the hardest case. For this ticket, log the failure and mark the saga `COMPENSATION_REQUIRED` for manual intervention rather than attempting an automated debit reversal.
-
-**Implementation — `OrderClient`:**
-
-Currently only has `triggerMatch()`. Add:
-```java
-@DeleteMapping("/orders/{orderId}/cancel")
-Map<String, Object> cancelOrder(@PathVariable("orderId") UUID orderId);
+**New `OrderClient` method:**
 ```
-The existing `DELETE /orders/{orderId}` endpoint on `order-service` maps to `OrderService.cancelOrder(orderId, userId)`. The saga needs a system-level cancel that bypasses the userId ownership check — either add a separate internal endpoint, or pass the order's `userId` from the saga context (already available on `Saga.getUserId()`).
+POST /orders/{orderId}/system-cancel   (body: { userId })
+```
+Uses `saga.getUserId()` so order-service can validate the order belongs to that user. This avoids a separate unauthenticated internal endpoint while still allowing system-initiated cancellation.
 
-**Implementation — `OrderService.cancelOrder` idempotency:**
+**Kafka Topics:** No new topics. `order.cancelled` already exists and is published by order-service.
 
-Currently throws if order is already `CANCELLED`, `FILLED`, or `REJECTED`. For compensation safety, return silently if already in a terminal state:
-```java
-if (order.getStatus() == OrderStatus.CANCELLED) return toResponse(order); // already done
+**Logging standards:**
+All compensation log lines must include: `orderId`, `userId`, `step`, `outcome` (COMPLETED/FAILED), `reason` (on failure). Format:
+```
+INFO  saga_compensation step=CANCEL orderId={} userId={} outcome=COMPLETED
+ERROR saga_compensation step=RELEASE orderId={} userId={} amount={} outcome=FAILED reason={}
+WARN  saga_compensation_anomaly step=CANCEL orderId={} userId={} orderStatus=FILLED — manual review required
 ```
 
-**Compensation flow in `failSaga()`:**
-```
-failSaga(saga, reason)
-  ├── if currentStep >= 2: orderClient.cancelOrder(orderId)      [catch + log, don't rethrow]
-  ├── if currentStep >= 3: ledgerClient.release(userId, orderId) [catch + log, don't rethrow]
-  ├── if currentStep >= 4: log COMPENSATION_REQUIRED — manual    [out of automated scope]
-  └── saga.status = FAILED, save
-```
-Each compensation call is wrapped in its own try/catch — a failed compensation step must not prevent the others from running or prevent the saga from reaching `FAILED` status.
+**API error responses:**
+- `order-service`: `cancelOrder()` on a `FILLED` order returns HTTP 409 with body `{ "error": "ORDER_IN_TERMINAL_STATE", "status": "FILLED", "orderId": "..." }` — not silently ignored.
+- `ledger-service`: `release()` for an already-released orderId returns HTTP 200 with current account state (idempotent success, not an error).
+
+---
 
 **Acceptance Criteria:**
-- [ ] `failSaga()` calls `orderClient.cancelOrder()` when `currentStep >= 2`
-- [ ] `failSaga()` calls `ledgerClient.release()` when `currentStep >= 3`
-- [ ] Step 4 failure logs `COMPENSATION_REQUIRED` and sets saga status accordingly
-- [ ] `OrderService.cancelOrder()` is idempotent — no exception if already `CANCELLED`
-- [ ] A compensation failure (e.g. ledger-service down) is logged but does not mask the original failure reason
-- [ ] Saga ends in `FAILED` status regardless of whether compensation succeeds
+- [ ] Step 1 failure: no compensation, saga → `FAILED`
+- [ ] Step 2 failure: Cancel Order runs; saga → `FAILED`; `COMPENSATION_CANCEL` SagaStep recorded
+- [ ] Step 3 failure: Cancel Order + Release Hold run independently; saga → `FAILED`; both SagaSteps recorded
+- [ ] If cancel fails, release still runs; saga still reaches `FAILED`
+- [ ] If release fails, saga still reaches `FAILED`; original failure reason preserved
+- [ ] `OrderService.cancelOrder()` is silent no-op for `CANCELLED` and `REJECTED`; raises alert for `FILLED`
+- [ ] `LedgerService.release()` is idempotent by `orderId` — second call is a no-op
+- [ ] All compensation log lines include orderId, userId, step, outcome, reason
 
 **Test Cases — `SagaCompensationTest` (unit, Mockito):**
 
 | Scenario | Mock setup | Assert |
 |----------|------------|--------|
-| Compliance fails (step 1) | `complianceClient.check()` throws | `saga.status = FAILED`; no cancel, no release called |
-| Matching fails (step 2) | `orderClient.triggerMatch()` throws | `saga.status = FAILED`; `cancelOrder()` called once |
-| Debit fails (step 3) | `ledgerClient.debit()` throws | `saga.status = FAILED`; `cancelOrder()` + `release()` both called |
-| Settlement fails (step 4) | `settlementClient.createSettlement()` throws | `saga.status = FAILED`; `cancelOrder()` + `release()` called; `COMPENSATION_REQUIRED` logged |
-| Cancel compensation itself fails | `orderClient.cancelOrder()` throws | `release()` still called; saga still reaches `FAILED` |
+| Compliance fails (step 1) | `complianceClient.check()` throws | saga=`FAILED`; no cancel/release called |
+| Matching fails (step 2) | `orderClient.triggerMatch()` throws | saga=`FAILED`; `cancelOrder()` called; `COMPENSATION_CANCEL` step=COMPLETED |
+| Debit fails (step 3) | `ledgerClient.debit()` throws | saga=`FAILED`; `cancelOrder()` + `release()` both called; both steps recorded |
+| Cancel fails, release succeeds | `cancelOrder()` throws, `release()` succeeds | saga=`FAILED`; `COMPENSATION_CANCEL` step=FAILED; `COMPENSATION_RELEASE` step=COMPLETED |
+| Cancel succeeds, release fails | `release()` throws | saga=`FAILED`; `COMPENSATION_CANCEL` step=COMPLETED; `COMPENSATION_RELEASE` step=FAILED |
+| Cancel called on CANCELLED order | `cancelOrder()` for already-cancelled order | Silent no-op; no exception; step recorded as COMPLETED |
+| Cancel called on FILLED order | `cancelOrder()` for FILLED order | WARN logged; step recorded as COMPENSATION_ANOMALY; saga still reaches `FAILED` |
+| Release called twice (idempotency) | `release()` called with same orderId | Second call returns 200 with no balance change |
 
-Run tests:
 ```bash
 mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest
+```
+
+---
+
+### EQ-115 · Saga Settlement Failure & Manual Reconciliation
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 3 | P0 — depends on EQ-113 |
+
+**Scope:** Step 4 (SETTLEMENT_CREATE) failure handling. Currently unhandled — a settlement failure silently falls through to `COMPLETED`, leaving the system in an inconsistent state: debit committed, settlement record absent.
+
+---
+
+**Why this is separate from EQ-113:**
+
+Step 4 failure is fundamentally different from steps 2–3. By the time settlement fails:
+- The debit has already committed — `cash_balance` is already reduced.
+- Cancel Order and Release Hold (from EQ-113) do NOT restore the money. `release()` reduces `cash_on_hold`, not `cash_balance`. Calling release() after a successful debit has no financial effect.
+- What is actually needed is a **credit transaction** — a new `ledger_transactions` entry that adds the amount back to `cash_balance`. This touches the financial ledger in a way that requires controls (reconciliation, sign-off) beyond automated saga logic.
+
+**Scenario 4 — Settlement fails (concrete example):**
+
+David's 10-share AAPL buy order matched at $190/share. The saga executed:
+- Step 1 ✓ Compliance passed
+- Step 2 ✓ Order matched, filled at $190 → order status `FILLED`
+- Step 3 ✓ Debit ran — David's `cash_balance` reduced by $1,900. His `cash_on_hold` also reduced (the hold consumed by the debit).
+- Step 4 ✗ Settlement service is down. Feign call throws.
+
+At this point:
+- `cash_balance` is $1,900 lower. This is the source of truth for David's cash.
+- `cash_on_hold` was already reduced by the debit — it does not have $1,900 frozen.
+- Calling `release()` here would try to reduce `cash_on_hold` which is already reduced — it would floor at zero with no meaningful effect. It does not restore `cash_balance`.
+- Calling `cancelOrder()` on a `FILLED` order is an anomaly (as defined in EQ-113) — it should not be done.
+
+**What this means operationally:**
+David is missing $1,900 from his balance with no settlement record. The correct fix is a CREDIT of $1,900 back to his `cash_balance`. This is a new ledger transaction, not a reversal of an existing one. It requires:
+1. Manual review to confirm the settlement actually did not happen (settlement-service might have written the record before crashing)
+2. Manual call to `POST /ledger/credit` (new endpoint) or direct DB operation with audit sign-off
+
+**Compensation for step 4:**
+- Do NOT call `cancelOrder()` — order is FILLED. Log the anomaly instead.
+- Do NOT call `release()` — hold was consumed by the debit. No effect.
+- Set `saga.status = COMPENSATION_REQUIRED`
+- Log: `CRITICAL saga_compensation_required orderId={} userId={} amount={} reason=settlement_failure`
+- Publish Kafka event `saga.compensation.required` → consumed by audit-service for ops alerting
+
+**Step 4 failure detection gap (existing bug):**
+The current code has no `if ("FAILED".equals(step4.getStatus()))` guard. Step 4 falls through to `saga.setStatus("COMPLETED")`. The first change in this ticket is adding that guard.
+
+---
+
+**New Kafka Topic:**
+
+| Topic | Producer | Consumer | Purpose |
+|-------|----------|----------|---------|
+| `saga.compensation.required` | `saga-orchestrator` | `audit-service` | Ops alerting — manual financial reconciliation required |
+
+**API changes:**
+- New `POST /ledger/credit` endpoint on ledger-service for manual reconciliation use by ops (not automated). Requires admin role. Records a CREDIT ledger transaction and increases `cash_balance`.
+
+**Acceptance Criteria:**
+- [ ] Step 4 failure is detected (guard added); saga no longer falls through to COMPLETED
+- [ ] Step 4 failure sets `saga.status = COMPENSATION_REQUIRED`
+- [ ] `saga.compensation.required` Kafka event published with orderId, userId, amount, reason
+- [ ] `audit-service` consumes the event and records it
+- [ ] `cancelOrder()` is NOT called for step 4 (order is FILLED)
+- [ ] `release()` is NOT called for step 4 (hold was consumed by debit)
+- [ ] New `POST /ledger/credit` endpoint available for manual use (admin role)
+
+**Test Cases:**
+
+| Scenario | Assert |
+|----------|--------|
+| Settlement fails | saga=`COMPENSATION_REQUIRED`; no cancel called; no release called; Kafka event published |
+| Settlement fails — audit-service receives event | audit record created with orderId + amount |
+
+```bash
+mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest#settlement_fails_setsCompensationRequired
+mvn test -pl audit-service -Dtest=AuditServiceTest#sagaCompensationRequired_recordsAuditEntry
+```
+
+---
+
+### EQ-116a · Unit Idempotency Tests
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 2 | P0 — depends on EQ-113b |
+
+**Purpose:** Add idempotency test cases to existing unit test files. No new infrastructure — these are Mockito tests that extend files already present in each service.
+
+**Why separate from EQ-116b:**
+These tests run fast, require no containers, and provide the first safety net for the idempotency changes introduced in EQ-113b. They should be written and passing before the heavyweight integration suite.
+
+**Test cases to add:**
+
+| File | Method | Scenario | Assert |
+|------|--------|----------|--------|
+| `LedgerServiceTest` | `release_duplicateOrderId_isNoOp` | `release()` called with same orderId twice | Balance unchanged on second call; RELEASE tx exists exactly once |
+| `OrderServiceTest` | `cancelOrder_alreadyCancelled_isNoOp` | `cancelOrder()` for already-CANCELLED order | Returns silently; no DB write; no exception |
+| `OrderServiceTest` | `cancelOrder_rejectedOrder_isNoOp` | `cancelOrder()` for REJECTED order | Returns silently; no DB write; no exception |
+| `OrderServiceTest` | `cancelOrder_filledOrder_logsAnomaly` | `cancelOrder()` for FILLED order | WARN logged; HTTP 409 returned; no status change |
+
+```bash
+mvn test -pl ledger-service -Dtest=LedgerServiceTest#release_duplicateOrderId_isNoOp
+mvn test -pl order-service -Dtest=OrderServiceTest
+```
+
+---
+
+### EQ-116b · Saga Data Integrity Test Suite
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 3 | P0 — depends on EQ-115, EQ-116a |
+
+**Purpose:** A Testcontainers integration test that runs each compensation scenario end-to-end and asserts the correct state in every service's database. Validates that no inconsistency survives a saga failure — the goal is to guarantee that for any failure point, all three service DBs (saga, order, ledger) are always in a coherent state.
+
+**Why a separate ticket:**
+Unit tests (Mockito) mock Feign clients and validate control flow. They cannot verify that service A's DB and service B's DB are consistent after a failure. This test suite does — it runs real services against real Postgres containers.
+
+**Test approach:**
+Each test case:
+1. Seeds all three DBs (saga DB, order-service DB, ledger-service DB) with known state
+2. Triggers a failure at a specific step by configuring the target service to fail (e.g. WireMock stub returning 500 for the settlement endpoint)
+3. Waits for the saga to reach a terminal state
+4. Queries all three DBs directly via JDBC and asserts the exact expected state in each
+
+**Test cases:**
+
+| Scenario | Saga DB expected | Order DB expected | Ledger DB expected |
+|----------|-----------------|-------------------|-------------------|
+| Step 1 fails — compliance | status=FAILED; step1=FAILED | status=PENDING (unchanged) | cash_balance unchanged; cash_on_hold unchanged; no RELEASE tx |
+| Step 2 fails — matching | status=FAILED; COMPENSATION_CANCEL=COMPLETED | status=CANCELLED | cash_balance unchanged; cash_on_hold unchanged; no RELEASE tx |
+| Step 3 fails — debit | status=FAILED; COMPENSATION_CANCEL + COMPENSATION_RELEASE=COMPLETED | status=CANCELLED | cash_balance unchanged; cash_on_hold restored; RELEASE tx recorded |
+| Step 3 fails — release also fails | status=FAILED; COMPENSATION_CANCEL=COMPLETED; COMPENSATION_RELEASE=FAILED | status=CANCELLED | cash_balance unchanged; cash_on_hold still frozen (ops must release) |
+| Step 4 fails — settlement | status=COMPENSATION_REQUIRED | status=FILLED | cash_balance reduced by debit amount; DEBIT tx recorded; no RELEASE tx |
+| Duplicate release (idempotency) | — | — | RELEASE tx exists exactly once; cash_on_hold released exactly once |
+| Pod restart mid-compensation | Recovery job runs; saga reaches FAILED | status=CANCELLED | cash_on_hold restored |
+
+**Run:**
+```bash
+mvn verify -pl saga-orchestrator -Dtest=SagaDataIntegrityTest
 ```
 
 ---
