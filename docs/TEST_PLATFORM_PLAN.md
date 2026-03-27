@@ -1,10 +1,10 @@
 # EquiFlow — Test Platform Plan
 **Role:** Senior Software Engineer — Test Platform
-**Status:** EQ-101 implemented — stop-loss tests now unblocked | **Last Updated:** 2026-03-25
+**Status:** EQ-113a complete — COMPENSATING checkpoint in place | **Last Updated:** 2026-03-27
 
 > **Key facts verified in source before planning:**
-> - `failSaga()` sets status to `FAILED` and saves — compensation never fires; `LedgerClient.release()` exists but is never called
-> - `OrderClient` has only `triggerMatch()` — no `cancelOrder()` method exists
+> - `failSaga()` now saves `COMPENSATING` to DB before resolving to `FAILED` — crash-safe checkpoint for EQ-113c recovery job (EQ-113a ✅)
+> - `OrderClient` has only `triggerMatch()` — no `cancelOrder()` method exists (added by EQ-113b)
 > - `OrderType.STOP_LOSS` fully implemented — `PENDING_TRIGGER`/`TRIGGERED` statuses, `trigger_price` column, `StopLossService` trigger evaluation, `equiflow.order.stop-loss.triggered` Kafka topic, saga short-circuit and re-entry all live
 > - `ComplianceResult` DTO has no enriched fields — `complianceReason`, `blockedUntil`, `triggerOrderId` don't exist yet
 > - `ledger-service` has no test directory — it is the only service with zero tests
@@ -32,7 +32,7 @@ Use this file to:
 
 | # | Status | Requirement | Planned Work | Type | Prereqs | Priority |
 |---|--------|-----------------|--------------|------|---------|----------|
-| 1 | ⚪ | [Saga Compensation](#1-saga-compensation) | `SagaCompensationIntegrationTest` | Integration Test | Add `cancelOrder()` to `OrderClient` | P0 |
+| 1 | 🔵 | [Saga Compensation](#1-saga-compensation) | `SagaCompensationIntegrationTest` | Integration Test | EQ-113a ✅ — EQ-113b, EQ-113c remaining | P0 |
 | 2 | 🔵 | [Ledger Concurrency](#2-ledger-concurrency) | `LedgerServiceTest` + `LedgerServiceConcurrencyTest` | Unit + Integration Test | None | P0 |
 | 3 | ⚪ | [Stop-Loss Order Testing](#3-stop-loss-order-testing) | `StopLossOrderServiceTest` | Unit Test | None — EQ-101 complete | P0 |
 | 4 | ⚪ | [API Mocking / Contract Testing](#4-api-mocking--contract-testing) | `PortfolioSummaryContractTest` | Contract Test | Implement EQ-103 portfolio endpoint | P0 |
@@ -48,7 +48,7 @@ Use this file to:
 |-------|------|--------|
 | 1 | ~~Item 2 — `LedgerServiceTest`~~ | ✅ 11 unit tests written — `LedgerServiceConcurrencyTest` (Testcontainers) still remaining |
 | 2 | Item 3 — `StopLossOrderServiceTest` | EQ-101 now complete — no prereqs remaining; write tests immediately |
-| 3 | Item 1 — Saga compensation | Highest interview impact; fixes critical production gap |
+| 3 | Item 1 — Saga compensation | EQ-113a done; EQ-113b + EQ-113c next — highest interview impact |
 | 4 | Item 5 — `trading-lifecycle.spec.ts` | No prereqs; first test to cross service boundaries |
 | 5 | ~~Item 6 — CI pipeline~~ | ✅ Done |
 | 6 | EQ-103 + Item 4 — Portfolio contract test | WireMock differentiator; requires EQ-103 feature first |
@@ -63,9 +63,12 @@ Use this file to:
 
 **JD Requirement:** *"Strong understanding of distributed systems architecture... Architect and implement solutions that accelerate integration and chaos testing."*
 
-**Gap:** `failSaga()` marks the saga `FAILED` and saves — that's it. If the saga fails after placing a ledger hold (step 4 passes, step 5 throws), the user's funds are permanently frozen. `LedgerClient.release()` is already implemented but never called.
+**Gap:** If the saga fails after placing a ledger hold, the user's funds are permanently frozen. `LedgerClient.release()` is implemented but not yet called from `failSaga()`.
 
-**Prerequisite:** Add `cancelOrder()` to `OrderClient` Feign interface + a `POST /orders/{id}/cancel` endpoint to `order-service`. Without it, compensation at the matching step cannot be implemented or tested.
+**Progress:**
+- ✅ **EQ-113a** — `failSaga()` saves `COMPENSATING` to DB before resolving to `FAILED`. Crash-safe boundary in place; `SagaRecoveryJob` can query this status to resume interrupted compensation flows. Unit test: `SagaCompensationTest#failSaga_setsCompensatingBeforeFeign`.
+- ⚪ **EQ-113b** — Add `POST /orders/{orderId}/system-cancel` to `order-service`; add `release()` idempotency to `ledger-service`. Prerequisite for EQ-113c.
+- ⚪ **EQ-113c** — Wire `cancelOrder()` + `release()` Feign calls into `failSaga()`; add `SagaRecoveryJob`. Depends on EQ-113a + EQ-113b.
 
 **Planned: `SagaCompensationIntegrationTest`**
 `saga-orchestrator/src/test/java/com/equiflow/saga/SagaCompensationIntegrationTest.java`
