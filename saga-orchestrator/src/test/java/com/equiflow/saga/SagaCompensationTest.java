@@ -8,17 +8,19 @@ import com.equiflow.saga.model.Saga;
 import com.equiflow.saga.orchestration.OrderSaga;
 import com.equiflow.saga.repository.SagaRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.mockito.InOrder;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
+import static org.testng.Assert.*;
 
 public class SagaCompensationTest {
 
@@ -62,9 +64,16 @@ public class SagaCompensationTest {
                 .startedAt(Instant.now())
                 .build();
 
+        // Capture each status value at the moment save() is called — Saga is mutable,
+        // so inspecting the object after-the-fact would reflect its final state only.
+        List<String> savedStatuses = new ArrayList<>();
+        when(sagaRepository.save(any(Saga.class))).thenAnswer(inv -> {
+            savedStatuses.add(((Saga) inv.getArgument(0)).getStatus());
+            return inv.getArgument(0);
+        });
+
         when(ledgerClient.getAccount(anyString())).thenReturn(Map.of("availableCash", DEFAULT_AVAILABLE_CASH));
         when(complianceClient.check(any())).thenThrow(new RuntimeException("compliance service unavailable"));
-        when(sagaRepository.save(any(Saga.class))).thenAnswer(inv -> inv.getArgument(0));
 
         Map<String, Object> orderEvent = Map.of(
                 "orderId", orderId.toString(),
@@ -77,9 +86,15 @@ public class SagaCompensationTest {
 
         orderSaga.execute(saga, orderEvent);
 
-        InOrder inOrder = inOrder(sagaRepository, orderClient, settlementClient);
-        inOrder.verify(sagaRepository, atLeastOnce()).save(argThat(s -> "COMPENSATING".equals(s.getStatus())));
-        inOrder.verify(orderClient, never()).triggerMatch(any());
-        inOrder.verify(settlementClient, never()).createSettlement(any());
+        // COMPENSATING must appear in the save history before FAILED
+        assertTrue(savedStatuses.contains("COMPENSATING"),
+                "sagaRepository.save() must be called with status=COMPENSATING");
+        assertTrue(savedStatuses.indexOf("COMPENSATING") < savedStatuses.lastIndexOf("FAILED"),
+                "COMPENSATING must be saved before FAILED");
+
+        // No downstream Feign calls to order or settlement services
+        // (EQ-113c will add them; this verifies the ordering contract holds)
+        verify(orderClient, never()).triggerMatch(any());
+        verify(settlementClient, never()).createSettlement(any());
     }
 }
