@@ -197,6 +197,8 @@ public class OrderSaga {
     }
 
     private Saga failSaga(Saga saga, String reason) {
+        saga.setStatus("COMPENSATING");
+        saga = sagaRepository.save(saga);
         saga.setStatus("FAILED");
         saga.setFailureReason(reason);
         saga.setCompletedAt(Instant.now());
