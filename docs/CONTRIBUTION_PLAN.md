@@ -46,12 +46,22 @@
 | ⚪ | <nobr>[EQ-116](#eq-116--saga-data-integrity-test-suite)</nobr> | Data Integrity Test Suite — Testcontainers end-to-end assertion of all three service DBs per compensation scenario | 3 | P0 — depends on EQ-115, EQ-113c |
 | ⚪ | <nobr>[EQ-114](#eq-114--remove-redundant-synchronous-order-matching-in-submitorder)</nobr> | Remove Redundant Synchronous Matching — order matching runs twice; saga must be the sole execution path | 3 | P1 |
 
+### Sprint 2 — Unit Test Coverage (95% JaCoCo)
+| Status | Ticket | Task | Points | Priority |
+|--------|--------|------|--------|----------|
+| ⚪ | <nobr>[EQ-117](#eq-117--order-service-unit-test-coverage)</nobr> | Order-Service — MatchingEngine, OrderBook, StopLossService, OrderExpiryService | 3 | P0 |
+| ⚪ | <nobr>[EQ-118](#eq-118--compliance-service-unit-test-coverage)</nobr> | Compliance-Service — WashSaleService full logic, edge cases | 2 | P0 |
+| ⚪ | <nobr>[EQ-119](#eq-119--settlement-service-unit-test-coverage)</nobr> | Settlement-Service — SettlementService, SettlementScheduler | 2 | P0 |
+| ⚪ | <nobr>[EQ-120](#eq-120--auth-service-unit-test-coverage)</nobr> | Auth-Service — JwtAuthFilter, RoleConverter, full auth paths | 2 | P0 |
+| ⚪ | <nobr>[EQ-121](#eq-121--audit-service-unit-test-coverage)</nobr> | Audit-Service — AuditEventListener, full service paths | 1 | P0 |
+| ⚪ | <nobr>[EQ-122](#eq-122--saga-orchestrator-unit-test-coverage)</nobr> | Saga-Orchestrator — SagaController, SagaEventListener, exception handling | 2 | P0 |
+| ⚪ | <nobr>[EQ-123](#eq-123--market-data-service-unit-test-coverage)</nobr> | Market-Data-Service — full test suite from zero coverage | 5 | P0 |
+| ⚪ | <nobr>[EQ-124](#eq-124--ledger-service-coverage-completion)</nobr> | Ledger-Service — LedgerController; enforce 95% JaCoCo rule | 1 | P0 |
+
 ### Backlog — Features
 | Status | Ticket | Feature | Points |
 |--------|--------|---------|--------|
-| ⚪ | <nobr>[EQ-201](#eq-201--trade-confirmation-documents)</nobr> | Trade Confirmation Documents — generate a receipt for every completed trade | 5 |
 | ⚪ | <nobr>[EQ-202](#eq-202--account-funding--deposit-and-withdrawal)</nobr> | Account Funding — let users add or withdraw money from their account | 8 |
-| ⚪ | <nobr>[EQ-203](#eq-203--wash-sale-compliance--user-facing-warning)</nobr> | Wash-Sale User Warning — when a trade is blocked by tax rules, explain why and when the user can try again | 3 |
 
 ---
 
@@ -687,63 +697,378 @@ Remove the `switch (request.getType())` block at the end of `OrderService.submit
 
 ---
 
-## Backlog — Approved, Not Yet Scheduled
+## Sprint 2 — Unit Test Coverage Detail
+
+> **Coverage target:** 95% JaCoCo line coverage on all service-layer and business-logic classes.
+> **Excluded from measurement** (consistent across all tickets): `*Application`, `*Config`, `*SecurityConfig`, `*Repository` interfaces, `*Filter`, model/DTO/enum packages.
+>
+> **Enforce per service** — add the following execution to each service's `pom.xml` jacoco plugin block:
+> ```xml
+> <execution>
+>   <id>jacoco-check</id>
+>   <goals><goal>check</goal></goals>
+>   <configuration>
+>     <excludes>
+>       <exclude>**/*Application.class</exclude>
+>       <exclude>**/*Config.class</exclude>
+>       <exclude>**/model/*.class</exclude>
+>       <exclude>**/dto/*.class</exclude>
+>       <exclude>**/*Repository.class</exclude>
+>       <exclude>**/*Filter.class</exclude>
+>     </excludes>
+>     <rules>
+>       <rule>
+>         <element>BUNDLE</element>
+>         <limits>
+>           <limit>
+>             <counter>LINE</counter>
+>             <value>COVEREDRATIO</value>
+>             <minimum>0.95</minimum>
+>           </limit>
+>         </limits>
+>       </rule>
+>     </rules>
+>   </configuration>
+> </execution>
+> ```
+> **Validate any service:**
+> ```bash
+> mvn verify -pl <service-name>
+> start <service-name>/target/site/jacoco/index.html   # Windows
+> open  <service-name>/target/site/jacoco/index.html   # Mac
+> ```
 
 ---
 
-### EQ-201 · Trade Confirmation Documents
-| Epic | Type | Points |
-|------|------|--------|
-| Compliance & Reporting | Feature | 5 |
+### EQ-117 · Order-Service Unit Test Coverage
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 3 | P0 |
 
-**Product Request:**
-> "Regulatory requirement. Every executed trade needs a confirmation document
-> showing the user what was traded, at what price, and what fees were applied.
-> Must be available for download within 24 hours of the trade."
+> **Scope:** `order-service` only. Existing `OrderServiceTest` covers basic order submission and market-hours rejection. The matching engine, order book, stop-loss evaluation, and order expiry have zero coverage.
 
-**Functionality:**
-A new endpoint on `order-service` returns a structured trade confirmation for
-any filled order. The confirmation is generated on-demand from existing order
-data — no separate document store is required at this stage. Every access is
-logged by `audit-service` for regulatory traceability.
+**Classes under test:** `MatchingEngine`, `OrderBook`, `StopLossService`, `OrderExpiryService`, `MarketHoursValidator`
 
-**Services Affected:**
+**Test Cases — `MatchingEngineTest` (unit, Mockito):**
 
-| Service | Change |
-|---------|--------|
-| `order-service` | New `GET /orders/{id}/confirmation` endpoint; confirmation DTO assembly from fill data |
-| `audit-service` | Consumes `trade.confirmation.accessed` Kafka event |
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `executeMarketOrder_fillsAgainstBestAsk` | Ask exists at $150; market buy submitted | Fill returned; ask removed from book; filled qty and price set |
+| `executeMarketOrder_noLiquidity_returnsEmpty` | Empty order book | Empty fill returned; order status remains `OPEN` |
+| `executeLimitOrder_priceMatches_fills` | Limit buy at $150; ask at $150 | Fill returned immediately |
+| `executeLimitOrder_priceMiss_queues` | Limit buy at $148; ask at $150 | No fill; order queued in book |
+| `partialFill_remainderQueued` | Buy 10; only 6 shares available | Fill qty=6; remaining 4 queued |
 
-**Database Changes:**
+**Test Cases — `OrderBookTest` (unit):**
 
-| Service DB | Change |
-|------------|--------|
-| `order-service` | No schema changes; reads from existing `orders` and `order_fills` tables |
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `addBid_maintainsPriceTimePriority` | Two bids at $150, then $151 | $151 bid is best bid |
+| `addAsk_maintainsPriceTimePriority` | Two asks at $152, then $151 | $151 ask is best ask |
+| `cancelOrder_removesFromBook` | Order in book; cancel called | Order no longer in bid/ask queue |
+| `getBestBid_emptyBook_returnsEmpty` | No bids | `Optional.empty()` |
 
-**Kafka Topics:**
+**Test Cases — `StopLossServiceTest` (unit, Mockito):**
 
-| Topic | Producer | Consumer | Purpose |
-|-------|----------|----------|---------|
-| `trade.confirmation.accessed` | `order-service` | `audit-service` | Regulatory log of every confirmation retrieval |
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `evaluateTriggers_priceAtOrBelowTrigger_triggersOrder` | `PENDING_TRIGGER` order at $170; current price $169 | Order status → `TRIGGERED`; Kafka event published |
+| `evaluateTriggers_priceAboveTrigger_noAction` | `PENDING_TRIGGER` order at $170; current price $171 | No status change; no event |
+| `evaluateTriggers_noPendingOrders_noAction` | No `PENDING_TRIGGER` orders for ticker | Repository queried; no save; no event |
+| `evaluateTriggers_multipleOrders_allTriggered` | Two orders at $170 and $165; price $164 | Both transition to `TRIGGERED` |
 
-**Happy Path:**
-1. User calls `GET /orders/{id}/confirmation` for a filled order
-2. `order-service` assembles the confirmation from the order record and fill data
-3. A `trade.confirmation.accessed` event is published to Kafka
-4. Response returns the structured confirmation
+**Test Cases — `OrderExpiryServiceTest` (unit, Mockito):**
 
-**Edge Cases:**
-- Order exists but is not yet filled (`PENDING`, `PENDING_TRIGGER`) → HTTP 409 with message indicating the order has not settled
-- Order ID does not exist → HTTP 404
-- Order belongs to a different user → HTTP 403
-- Order was partially filled → confirmation reflects the filled quantity and weighted average fill price only
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `expireOpenOrders_pastExpiry_cancels` | Limit order with `expiresAt` in the past | Status → `CANCELLED`; `orderRepository.save()` called |
+| `expireOpenOrders_notExpired_noAction` | `expiresAt` in the future | No status change; no save |
+| `expireOpenOrders_noOpenOrders_noOp` | Repository returns empty list | No saves; no exceptions |
+
+```bash
+mvn test -pl order-service -Dtest=MatchingEngineTest,OrderBookTest,StopLossServiceTest,OrderExpiryServiceTest
+mvn verify -pl order-service
+```
 
 **Acceptance Criteria:**
-- [ ] `GET /orders/{id}/confirmation` returns a structured confirmation for any `FILLED` order
-- [ ] Confirmation includes: order ID, ticker, type, quantity, fill price, timestamp, estimated fee
-- [ ] `AuditService` logs every confirmation access via Kafka event
-- [ ] Requesting a confirmation for a non-filled order returns HTTP 409
-- [ ] Requesting a confirmation for another user's order returns HTTP 403
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl order-service` passes JaCoCo 95% line coverage check on `MatchingEngine`, `OrderBook`, `StopLossService`, `OrderExpiryService`, `MarketHoursValidator`, `OrderService`
+- [ ] JaCoCo `check` execution added to `order-service/pom.xml`
+
+---
+
+### EQ-118 · Compliance-Service Unit Test Coverage
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 2 | P0 |
+
+> **Scope:** `compliance-service` only. Existing `ComplianceServiceTest` mocks `WashSaleService` — the wash-sale detection logic itself has zero coverage.
+
+**Classes under test:** `WashSaleService`, `ComplianceService` (remaining paths)
+
+**Test Cases — `WashSaleServiceTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `isWashSale_saleLossThenRepurchaseWithin30Days_returnsViolation` | SELL AAPL at loss on day 0; BUY AAPL on day 15 | `isWashSale=true`; violation with `WASH_SALE` code returned |
+| `isWashSale_saleLossThenRepurchaseAt30Days_noViolation` | SELL AAPL at loss on day 0; BUY AAPL on day 30 (boundary) | `isWashSale=false` |
+| `isWashSale_saleLossThenRepurchaseAt31Days_noViolation` | Repurchase 31 days after loss sale | `isWashSale=false` |
+| `isWashSale_saleAtGain_neverViolation` | SELL AAPL at gain; repurchase day 5 | `isWashSale=false` — wash-sale rule only applies to losses |
+| `isWashSale_noSaleHistory_noViolation` | No prior sales for ticker | `isWashSale=false`; repository queried |
+| `isWashSale_differentTicker_noViolation` | SELL AAPL at loss; BUY MSFT day 5 | `isWashSale=false` — different ticker |
+
+**Test Cases — `ComplianceServiceTest` additions:**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `check_multipleViolations_allReturned` | Wash-sale AND insufficient funds both fail | `approved=false`; two violations in response |
+| `check_eventPublished_onApproval` | Valid order approved | `complianceEventPublisher.publishApproved()` called once |
+| `check_eventPublished_onRejection` | Order rejected | `complianceEventPublisher.publishRejected()` called once |
+
+```bash
+mvn test -pl compliance-service -Dtest=WashSaleServiceTest,ComplianceServiceTest
+mvn verify -pl compliance-service
+```
+
+**Acceptance Criteria:**
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl compliance-service` passes JaCoCo 95% line coverage check on `WashSaleService` and `ComplianceService`
+- [ ] JaCoCo `check` execution added to `compliance-service/pom.xml`
+
+---
+
+### EQ-119 · Settlement-Service Unit Test Coverage
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 2 | P0 |
+
+> **Scope:** `settlement-service` only. `NyseCalendar` is well covered. `SettlementService` and `SettlementScheduler` have zero coverage.
+
+**Classes under test:** `SettlementService`, `SettlementScheduler`
+
+**Test Cases — `SettlementServiceTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `createSettlement_savesWithPendingStatusAndT1Date` | Valid settlement request | `settlementRepository.save()` called; status=`PENDING_SETTLEMENT`; `settlementDate` = T+1 business day |
+| `processSettlements_pendingOnSettlementDate_marksSettled` | `PENDING_SETTLEMENT` record with today's settlement date | Status → `SETTLED`; `settlementEventPublisher.publish()` called |
+| `processSettlements_pendingFutureDate_noAction` | Settlement date is tomorrow | No status change; no event published |
+| `processSettlements_noRecords_noOp` | Repository returns empty list | No saves; no exceptions |
+| `createSettlement_assignsCorrectSettlementDate_skipWeekend` | Order filled on Friday | `settlementDate` is the following Monday |
+
+**Test Cases — `SettlementSchedulerTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `runSettlement_delegatesToService` | Scheduler method invoked | `settlementService.processSettlements()` called exactly once |
+
+```bash
+mvn test -pl settlement-service -Dtest=SettlementServiceTest,SettlementSchedulerTest
+mvn verify -pl settlement-service
+```
+
+**Acceptance Criteria:**
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl settlement-service` passes JaCoCo 95% line coverage check on `SettlementService`, `SettlementScheduler`, `NyseCalendar`
+- [ ] JaCoCo `check` execution added to `settlement-service/pom.xml`
+
+---
+
+### EQ-120 · Auth-Service Unit Test Coverage
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 2 | P0 |
+
+> **Scope:** `auth-service` only. Existing `AuthServiceTest` covers `AuthService.issueToken()` and `JwtService` token generation/validation. `JwtAuthFilter` and `RoleConverter` have zero coverage.
+
+**Classes under test:** `JwtAuthFilter`, `RoleConverter`
+
+**Test Cases — `JwtAuthFilterTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `doFilter_validBearerToken_setsSecurityContext` | Request with valid `Authorization: Bearer <token>` | `SecurityContextHolder` populated; `filterChain.doFilter()` called |
+| `doFilter_missingAuthHeader_proceeds_unauthenticated` | No `Authorization` header | Filter does not throw; `filterChain.doFilter()` called; security context empty |
+| `doFilter_expiredToken_proceeds_unauthenticated` | `Authorization` header with expired JWT | Security context not populated; chain proceeds |
+| `doFilter_malformedToken_proceeds_unauthenticated` | `Authorization: Bearer not-a-jwt` | No exception propagated; chain proceeds |
+
+**Test Cases — `RoleConverterTest` (unit):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `convertToDatabaseColumn_allRoles` | Each `Role` enum value passed | Returns correct string representation |
+| `convertToEntityAttribute_allValues` | Each string value passed | Returns correct `Role` enum constant |
+| `convertToEntityAttribute_unknownValue_throws` | Unrecognised string | `IllegalArgumentException` thrown |
+
+```bash
+mvn test -pl auth-service -Dtest=JwtAuthFilterTest,RoleConverterTest
+mvn verify -pl auth-service
+```
+
+**Acceptance Criteria:**
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl auth-service` passes JaCoCo 95% line coverage check on `AuthService`, `JwtService`, `JwtAuthFilter`, `RoleConverter`
+- [ ] JaCoCo `check` execution added to `auth-service/pom.xml`
+
+---
+
+### EQ-121 · Audit-Service Unit Test Coverage
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 1 | P0 |
+
+> **Scope:** `audit-service` only. Existing `AuditServiceTest` covers `AuditService.logEvent()` and `getEventsByOrder()`. `AuditEventListener` (Kafka consumer) has zero coverage.
+
+**Classes under test:** `AuditEventListener`
+
+**Test Cases — `AuditEventListenerTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `onEvent_orderPlaced_logsAuditEvent` | `ORDER_PLACED` Kafka payload received | `auditService.logEvent()` called with matching `eventType` and `orderId` |
+| `onEvent_sagaStarted_logsAuditEvent` | `SAGA_STARTED` payload received | `auditService.logEvent()` called; `sagaId` present in payload |
+| `onEvent_sagaFailed_logsAuditEvent` | `SAGA_FAILED` payload received | `auditService.logEvent()` called; `failureReason` preserved |
+| `onEvent_nullPayload_doesNotThrow` | Null message body | No exception; `logEvent()` not called |
+
+```bash
+mvn test -pl audit-service -Dtest=AuditEventListenerTest
+mvn verify -pl audit-service
+```
+
+**Acceptance Criteria:**
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl audit-service` passes JaCoCo 95% line coverage check on `AuditService` and `AuditEventListener`
+- [ ] JaCoCo `check` execution added to `audit-service/pom.xml`
+
+---
+
+### EQ-122 · Saga-Orchestrator Unit Test Coverage
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 2 | P0 |
+
+> **Scope:** `saga-orchestrator` only. `SagaController`, `SagaEventListener`, and `GlobalExceptionHandler` have zero coverage.
+
+**Classes under test:** `SagaController`, `SagaEventListener`, `GlobalExceptionHandler`
+
+**Test Cases — `SagaControllerTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `getSaga_found_returns200` | Valid `sagaId` exists | HTTP 200; saga body returned |
+| `getSaga_notFound_returns404` | `sagaId` does not exist | HTTP 404 |
+| `getSagaByOrderId_found_returns200` | Valid `orderId` with associated saga | HTTP 200; saga body returned |
+| `getSagaByOrderId_notFound_returns404` | No saga for `orderId` | HTTP 404 |
+| `getSagasByStatus_returns200` | Query by `COMPENSATING` status | HTTP 200; list of matching sagas returned |
+
+**Test Cases — `SagaEventListenerTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `onOrderPlaced_startsSaga` | `ORDER_PLACED` Kafka event received | `sagaService.startSaga()` called with correct `orderId` and `userId` |
+| `onStopLossTriggered_reEntersSaga` | `STOP_LOSS_TRIGGERED` event; existing saga found | `orderSaga.execute()` called; order type overridden to `MARKET` |
+| `onStopLossTriggered_sagaNotFound_logs` | No saga exists for `orderId` | No exception; error logged |
+
+**Test Cases — `GlobalExceptionHandlerTest` (unit):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `handleUnknownException_returns500` | Unhandled `RuntimeException` thrown | HTTP 500; body contains error message |
+
+```bash
+mvn test -pl saga-orchestrator -Dtest=SagaControllerTest,SagaEventListenerTest,GlobalExceptionHandlerTest
+mvn verify -pl saga-orchestrator
+```
+
+**Acceptance Criteria:**
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl saga-orchestrator` passes JaCoCo 95% line coverage check on `SagaController`, `SagaEventListener`, `SagaService`, `OrderSaga`, `GlobalExceptionHandler`
+- [ ] JaCoCo `check` execution added to `saga-orchestrator/pom.xml`
+
+---
+
+### EQ-123 · Market-Data-Service Unit Test Coverage
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 5 | P0 |
+
+> **Scope:** `market-data-service` only. **Zero tests exist.** This is the only service with no test directory. A full suite must be created from scratch covering `MarketDataService`, `ScenarioEngine`, and `StopLossTriggerService`.
+
+**Classes under test:** `MarketDataService`, `ScenarioEngine`, `StopLossTriggerService`
+
+**Test Cases — `MarketDataServiceTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `getCurrentPrice_found_returnsPrice` | Ticker exists in repository | Returns `TickerPrice` with correct price |
+| `getCurrentPrice_notFound_throws` | Ticker not in repository | `EntityNotFoundException` (or equivalent) thrown |
+| `updatePrice_savesUpdatedRecord` | New price submitted for existing ticker | `tickerPriceRepository.save()` called with new price value |
+| `getAllPrices_returnsList` | Multiple tickers seeded | Returns full list from repository |
+
+**Test Cases — `ScenarioEngineTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `startScenario_savesActiveSession` | `flash_crash` scenario started | Scenario session saved; initial price deltas applied to all affected tickers |
+| `stopScenario_clearsActiveSession` | Active scenario stopped | Session removed; no further price steps applied |
+| `applyStep_adjustsPricesByScenarioDelta` | One step of `bull_run` scenario applied | Each ticker price updated by the configured delta; `save()` called per ticker |
+| `startScenario_unknownType_throws` | Unknown scenario name passed | `IllegalArgumentException` thrown |
+| `applyStep_noActiveScenario_noOp` | No active scenario when step fires | No price changes; no repository writes |
+
+**Test Cases — `StopLossTriggerServiceTest` (unit, Mockito):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `evaluate_priceAtOrBelowTrigger_callsOrderService` | Current price $149; `PENDING_TRIGGER` order at $150 | `orderServiceClient.evaluateStopLoss()` called with correct ticker and price |
+| `evaluate_priceAboveTrigger_noCall` | Current price $151; trigger at $150 | `orderServiceClient` not called |
+| `evaluate_orderServiceDown_logsAndContinues` | `orderServiceClient` throws `FeignException` | Exception caught; error logged; no rethrow |
+
+```bash
+mvn test -pl market-data-service -Dtest=MarketDataServiceTest,ScenarioEngineTest,StopLossTriggerServiceTest
+mvn verify -pl market-data-service
+```
+
+**Acceptance Criteria:**
+- [ ] Test directory created at `market-data-service/src/test/java/com/equiflow/marketdata/`
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl market-data-service` passes JaCoCo 95% line coverage check on `MarketDataService`, `ScenarioEngine`, `StopLossTriggerService`
+- [ ] JaCoCo `check` execution added to `market-data-service/pom.xml`
+
+---
+
+### EQ-124 · Ledger-Service Coverage Completion
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| Platform | Engineering | 1 | P0 |
+
+> **Scope:** `ledger-service` only. `LedgerService` is well covered by existing unit and Testcontainers tests. `LedgerController` REST layer has zero coverage. This ticket adds controller tests and enforces the JaCoCo rule.
+
+**Classes under test:** `LedgerController`
+
+**Test Cases — `LedgerControllerTest` (unit, Mockito + MockMvc):**
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `hold_validRequest_returns200` | `POST /ledger/hold` with valid body | HTTP 200; `ledgerService.hold()` called once |
+| `release_validRequest_returns200` | `POST /ledger/release` with valid body | HTTP 200; `ledgerService.release()` called once |
+| `debit_validRequest_returns200` | `POST /ledger/debit` with valid body | HTTP 200; `ledgerService.debit()` called once |
+| `getAccount_found_returns200` | `GET /ledger/accounts/{userId}` for existing user | HTTP 200; account body returned |
+| `getAccount_notFound_returns404` | `GET /ledger/accounts/{userId}` for unknown user | HTTP 404 |
+| `hold_insufficientFunds_returns400` | `ledgerService.hold()` throws `InsufficientFundsException` | HTTP 400; error message in body |
+
+```bash
+mvn test -pl ledger-service -Dtest=LedgerControllerTest
+mvn verify -pl ledger-service
+```
+
+**Acceptance Criteria:**
+- [ ] All test cases above pass
+- [ ] `mvn verify -pl ledger-service` passes JaCoCo 95% line coverage check on `LedgerService` and `LedgerController`
+- [ ] JaCoCo `check` execution added to `ledger-service/pom.xml` (supplement existing jacoco config)
+
+---
+
+## Backlog — Approved, Not Yet Scheduled
 
 ---
 
@@ -806,53 +1131,3 @@ immutable entry for reconciliation.
 - [ ] All deposit and withdrawal events are published to Kafka and logged by `AuditService`
 - [ ] Bank integration is stubbed; real ACH integration is out of scope
 
----
-
-### EQ-203 · Wash-Sale Compliance — User-Facing Warning
-| Epic | Type | Points |
-|------|------|--------|
-| Compliance & Reporting | Feature | 3 |
-
-**Product Request:**
-> "Right now wash-sale violations are silently blocked. Users don't understand
-> why their order was rejected. We need a clear explanation returned with the
-> rejection so users can make an informed decision."
-
-**Functionality:**
-When `compliance-service` blocks an order due to a wash-sale violation, it
-currently returns a generic rejection. This story enriches the rejection
-response with a structured explanation: the rule that was violated, the date
-the block expires, and the order ID of the triggering sale. No new data is
-stored — this is a response enrichment on existing compliance logic.
-
-**Services Affected:**
-
-| Service | Change |
-|---------|--------|
-| `compliance-service` | Enrich the wash-sale rejection response with `complianceReason`, `blockedUntil`, and `triggerOrderId` fields |
-| `saga-orchestrator` | Propagate the enriched rejection body back to the caller rather than a generic error |
-
-**Database Changes:**
-
-| Service DB | Change |
-|------------|--------|
-| `compliance-service` | No schema changes; `wash_sale_history` table already stores the triggering sale date and order ID |
-
-**Kafka Topics:** None — compliance check is a synchronous Feign call within the saga.
-
-**Happy Path:**
-1. User submits a buy order for AAPL within 30 days of selling AAPL at a loss
-2. `compliance-service` detects the wash-sale violation
-3. Rejection response includes `complianceReason: "Wash-sale rule: repurchase within 30 days of a loss sale"`, `blockedUntil: "2026-04-15"`, `triggerOrderId: "ord-8821"`
-4. Saga marks the order `REJECTED` and returns the enriched error to the user
-
-**Edge Cases:**
-- Multiple wash-sale violations exist for the same ticker (e.g., sold twice at a loss) → return the most recent triggering sale; `blockedUntil` is calculated from the most recent sale date
-- `wash_sale_history` record is missing for the blocked order (data inconsistency) → return the rejection with `complianceReason` populated but `triggerOrderId: null`; do not fail the compliance check itself
-- User re-submits the same order after `blockedUntil` has passed → order proceeds normally through compliance; no rejection
-
-**Acceptance Criteria:**
-- [ ] Wash-sale rejection response includes a `complianceReason` field with a human-readable explanation
-- [ ] Response includes `blockedUntil` date (30 days after the triggering sale)
-- [ ] Response includes `triggerOrderId` referencing the sale that caused the block
-- [ ] If `triggerOrderId` cannot be determined, the field is returned as `null` rather than causing an error
