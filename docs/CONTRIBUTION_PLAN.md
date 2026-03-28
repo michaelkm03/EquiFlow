@@ -466,35 +466,98 @@ mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest#failSaga_setsCompensa
 
 *order-service:*
 - New endpoint: `POST /orders/{orderId}/system-cancel` (body: `{ userId }`) — validates order belongs to user; cancels the order; publishes `order.cancelled` Kafka event
-- `OrderService.cancelOrder()` terminal state rules:
-  - `CANCELLED` or `REJECTED` → return silently (no-op; no DB write)
-  - `FILLED` → return HTTP 409 `{ "error": "ORDER_IN_TERMINAL_STATE", "status": "FILLED", "orderId": "..." }` and log WARN
-  - `PENDING` or `OPEN` → cancel normally
+- `OrderService.cancelOrder()` terminal state rules — covers all 10 `OrderStatus` values:
+
+| Status | System-Cancel Behaviour |
+|--------|------------------------|
+| `PENDING` | Cancel → `CANCELLED`; publish `order.cancelled` |
+| `COMPLIANCE_CHECK` | Cancel → `CANCELLED`; publish `order.cancelled` (mid-saga step 1, not yet matched) |
+| `OPEN` | Cancel → `CANCELLED`; remove entry from order book; publish `order.cancelled` |
+| `PENDING_TRIGGER` | Cancel → `CANCELLED`; publish `order.cancelled` (stop-loss not yet triggered) |
+| `TRIGGERED` | Cancel → `CANCELLED`; publish `order.cancelled` (triggered but not yet re-matched) |
+| `CANCELLED` | No-op — return silently; no DB write; no event |
+| `REJECTED` | No-op — return silently; no DB write; no event |
+| `FAILED` | No-op — return silently; no DB write; no event (already terminal) |
+| `FILLED` | HTTP 409 `{ "error": "ORDER_IN_TERMINAL_STATE", "status": "FILLED", "orderId": "..." }`; log WARN — money already moved, ops must reconcile |
+| `PARTIALLY_FILLED` | HTTP 409 `{ "error": "ORDER_IN_TERMINAL_STATE", "status": "PARTIALLY_FILLED", "orderId": "..." }`; log WARN — partial fill means money partially moved, treat same as FILLED |
 
 *ledger-service:*
-- Add `existsByOrderIdAndType(orderId, type)` to `LedgerTransactionRepository`
-- In `LedgerService.release()`: check for an existing RELEASE transaction by orderId before modifying balances. If found, return current account state without writing a new transaction. HTTP 200 either way.
+- Add to `LedgerTransactionRepository`:
+  ```java
+  boolean existsByOrderIdAndType(UUID orderId, String type);
+  ```
+- In `LedgerService.release()`, add an idempotency guard **after** `SELECT FOR UPDATE` and **before** any balance mutation:
+  ```java
+  if (request.getOrderId() != null &&
+      transactionRepository.existsByOrderIdAndType(request.getOrderId(), "RELEASE")) {
+      log.info("Duplicate release detected for orderId={}, returning current state", request.getOrderId());
+      return toResponse(account);
+  }
+  ```
+
+**Why the existing `.max(BigDecimal.ZERO)` floor is not sufficient:** it prevents `cashOnHold` from going negative, but a second call with the same amount still reduces the hold by that amount again before hitting the floor — meaning the first call releases $1,500 correctly, and a second call silently reduces the hold by another $1,500 (floored to 0 if already 0). The idempotency check blocks the second call before any mutation occurs.
+
+**Transaction boundary:** the guard and any subsequent write must execute inside the same `@Transactional` block, after `findByUserIdForUpdate` acquires the row lock. This prevents a race where two concurrent calls both pass the idempotency check before either writes the RELEASE transaction.
+
+**Null orderId:** releases without an `orderId` (manual ledger adjustments) skip the idempotency check — only saga-driven releases carry an orderId.
+
+**Return value:** HTTP 200 in both the new-release and duplicate-release paths. The caller (EQ-113c compensation) does not need to distinguish between them.
 
 **Services Affected:** `order-service`, `ledger-service`.
 
 **Acceptance Criteria:**
-- [ ] `POST /orders/{orderId}/system-cancel` cancels a PENDING or OPEN order; returns HTTP 200; publishes `order.cancelled`
-- [ ] System-cancel on a CANCELLED or REJECTED order returns HTTP 200 with no DB change
-- [ ] System-cancel on a FILLED order returns HTTP 409 with `ORDER_IN_TERMINAL_STATE` body; WARN logged
+- [ ] `POST /orders/{orderId}/system-cancel` cancels a `PENDING`, `COMPLIANCE_CHECK`, `OPEN`, `PENDING_TRIGGER`, or `TRIGGERED` order; returns HTTP 200; publishes `order.cancelled`
+- [ ] System-cancel on `CANCELLED`, `REJECTED`, or `FAILED` returns HTTP 200 with no DB change
+- [ ] System-cancel on `FILLED` or `PARTIALLY_FILLED` returns HTTP 409 with `ORDER_IN_TERMINAL_STATE` body; WARN logged
 - [ ] `LedgerService.release()` called twice with the same orderId: second call returns HTTP 200; `cash_on_hold` unchanged; no second RELEASE transaction written
 
-**Test Cases (unit, Mockito):**
+**Test Cases — `OrderServiceTest` (unit, Mockito):**
 
-| File | Method | Assert |
-|------|--------|--------|
-| `OrderServiceTest` | `cancelOrder_alreadyCancelled_isNoOp` | Returns silently; `orderRepository.save()` not called |
-| `OrderServiceTest` | `cancelOrder_rejectedOrder_isNoOp` | Returns silently; no DB write |
-| `OrderServiceTest` | `cancelOrder_filledOrder_returns409` | HTTP 409 returned; WARN logged; order status unchanged |
-| `LedgerServiceTest` | `release_duplicateOrderId_isNoOp` | `existsByOrderIdAndType` returns true; no balance change; no second tx written |
+*Cancellable states — saga compensation calls system-cancel; these orders have not yet been matched:*
+
+| Method | Order Status | Assert |
+|--------|-------------|--------|
+| `systemCancel_pendingOrder_cancels` | `PENDING` | Status → `CANCELLED`; `orderRepository.save()` called; `order.cancelled` event published |
+| `systemCancel_complianceCheckOrder_cancels` | `COMPLIANCE_CHECK` | Status → `CANCELLED`; event published (mid-step-1, nothing matched yet) |
+| `systemCancel_openOrder_cancels` | `OPEN` | Status → `CANCELLED`; event published |
+| `systemCancel_pendingTriggerOrder_cancels` | `PENDING_TRIGGER` | Status → `CANCELLED`; event published (stop-loss never fired) |
+| `systemCancel_triggeredOrder_cancels` | `TRIGGERED` | Status → `CANCELLED`; event published (trigger fired but order not yet re-matched) |
+
+*Already-terminal states — compensation called twice or after saga already resolved; must be safe no-ops:*
+
+| Method | Order Status | Assert |
+|--------|-------------|--------|
+| `systemCancel_alreadyCancelled_isNoOp` | `CANCELLED` | Returns HTTP 200; `orderRepository.save()` not called; no event published |
+| `systemCancel_rejectedOrder_isNoOp` | `REJECTED` | Returns HTTP 200; no DB write; no event |
+| `systemCancel_failedOrder_isNoOp` | `FAILED` | Returns HTTP 200; no DB write; no event |
+
+*Money-moved states — order was matched before compensation ran; ops must reconcile manually:*
+
+| Method | Order Status | Assert |
+|--------|-------------|--------|
+| `systemCancel_filledOrder_returns409` | `FILLED` | HTTP 409; body contains `ORDER_IN_TERMINAL_STATE` and `orderId`; WARN logged; order status unchanged |
+| `systemCancel_partiallyFilledOrder_returns409` | `PARTIALLY_FILLED` | HTTP 409; same body shape as FILLED; WARN logged; no status change |
+
+**Test Cases — `LedgerServiceTest` (unit, Mockito):**
+
+*Normal release path — verifies the baseline behaviour before testing idempotency:*
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `release_firstCall_reducesHoldAndWritesTransaction` | `cashOnHold` = $1,500; release $1,500 for orderId X | `cashOnHold` → $0; one `RELEASE` transaction written; `existsByOrderIdAndType` not called for first call* |
+
+*Idempotency — the recovery job or a retry may call release() more than once for the same order:*
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `release_duplicateOrderId_isNoOp` | `existsByOrderIdAndType(orderId, "RELEASE")` returns `true` | `cashOnHold` unchanged; `accountRepository.save()` not called; no second `RELEASE` transaction written; returns HTTP 200 |
+| `release_nullOrderId_alwaysExecutes` | `orderId` is null on the request | Idempotency check skipped entirely; balance reduced; transaction written (manual adjustments have no orderId) |
+
+> \* The guard only runs on subsequent calls; the first call writes the transaction, which is what subsequent calls detect.
 
 ```bash
 mvn test -pl order-service -Dtest=OrderServiceTest
-mvn test -pl ledger-service -Dtest=LedgerServiceTest#release_duplicateOrderId_isNoOp
+mvn test -pl ledger-service -Dtest=LedgerServiceTest#release_duplicateOrderId_isNoOp,LedgerServiceTest#release_nullOrderId_alwaysExecutes
 ```
 
 ---
