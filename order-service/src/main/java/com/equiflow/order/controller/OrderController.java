@@ -104,6 +104,19 @@ public class OrderController {
         return ResponseEntity.ok(orderService.triggerMatch(orderId));
     }
 
+    @PostMapping("/{orderId}/system-cancel")
+    @Operation(summary = "Cancel an order on behalf of the system (internal use by saga compensation)")
+    @ApiResponses({
+        @ApiResponse(responseCode = "200", description = "Order cancelled or already in a terminal no-op state"),
+        @ApiResponse(responseCode = "409", description = "Order is FILLED or PARTIALLY_FILLED — money already moved; manual reconciliation required")
+    })
+    public ResponseEntity<OrderResponse> systemCancel(
+            @PathVariable UUID orderId,
+            @RequestBody Map<String, Object> body) {
+        UUID userId = UUID.fromString((String) body.get("userId"));
+        return ResponseEntity.ok(orderService.systemCancelOrder(orderId, userId));
+    }
+
     @GetMapping("/book/{ticker}")
     @Operation(summary = "Get order book snapshot for a ticker")
     public ResponseEntity<Map<String, Object>> getOrderBook(@PathVariable String ticker) {

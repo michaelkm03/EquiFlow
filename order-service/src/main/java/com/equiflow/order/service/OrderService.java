@@ -134,6 +134,35 @@ public class OrderService {
         return toResponse(order);
     }
 
+    @Transactional
+    public OrderResponse systemCancelOrder(UUID orderId, UUID userId) {
+        Order order = orderRepository.findByIdAndUserId(orderId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+
+        if (!order.getUserId().equals(userId)) {
+            throw new IllegalStateException("Requested order does not belong to the user: " + order.getUserId());
+        }
+
+        switch (order.getStatus()) {
+            case CANCELLED, REJECTED, FAILED -> {
+                log.info("systemCancel no-op for orderId={} status={}", orderId, order.getStatus());
+                return toResponse(order);
+            }
+            case FILLED, PARTIALLY_FILLED -> {
+                log.warn("systemCancel blocked for orderId={} status={} — money already moved",
+                        orderId, order.getStatus());
+                throw new IllegalStateException("ORDER_IN_TERMINAL_STATE:" + order.getStatus());
+            }
+            default -> {
+                order.setStatus(OrderStatus.CANCELLED);
+                order = orderRepository.save(order);
+                eventPublisher.publishOrderCancelled(order);
+                log.info("systemCancel completed for orderId={}", orderId);
+                return toResponse(order);
+            }
+        }
+    }
+
     public Map<String, Object> getOrderBook(String ticker) {
         return matchingEngine.getBookSnapshot(ticker);
     }
