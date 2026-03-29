@@ -11,4 +11,5 @@ import java.util.UUID;
 public interface LedgerTransactionRepository extends JpaRepository<LedgerTransaction, UUID> {
     List<LedgerTransaction> findByUserIdOrderByCreatedAtDesc(UUID userId);
     List<LedgerTransaction> findByOrderId(UUID orderId);
+    boolean existsByOrderIdAndType(UUID orderId, String type);
 }

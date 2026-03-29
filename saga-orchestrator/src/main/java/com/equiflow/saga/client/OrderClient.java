@@ -16,6 +16,6 @@ public interface OrderClient {
     Map<String, Object> triggerMatch(@PathVariable("orderId") UUID orderId);
 
     @PostMapping("/orders/{orderId}/system-cancel")
-    Map<String, Object> systemCancel(@PathVariable("orderId") UUID orderId,
+    Map<String, Object> systemCancelOrder(@PathVariable("orderId") UUID orderId,
                                     @RequestBody Map<String, Object> body);
 }

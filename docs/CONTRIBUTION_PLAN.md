@@ -538,6 +538,13 @@ mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest#failSaga_setsCompensa
 | `systemCancel_filledOrder_returns409` | `FILLED` | HTTP 409; body contains `ORDER_IN_TERMINAL_STATE` and `orderId`; WARN logged; order status unchanged |
 | `systemCancel_partiallyFilledOrder_returns409` | `PARTIALLY_FILLED` | HTTP 409; same body shape as FILLED; WARN logged; no status change |
 
+*Negative / guard cases — bad input must not corrupt state:*
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `systemCancel_orderNotFound_throws` | `orderId` does not exist in repository | `IllegalArgumentException` thrown; no event published |
+| `systemCancel_wrongUser_throws` | `orderId` exists but belongs to a different `userId` | `IllegalArgumentException` thrown; order status unchanged |
+
 **Test Cases — `LedgerServiceTest` (unit, Mockito):**
 
 *Normal release path — verifies the baseline behaviour before testing idempotency:*
@@ -552,6 +559,12 @@ mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest#failSaga_setsCompensa
 |--------|----------|--------|
 | `release_duplicateOrderId_isNoOp` | `existsByOrderIdAndType(orderId, "RELEASE")` returns `true` | `cashOnHold` unchanged; `accountRepository.save()` not called; no second `RELEASE` transaction written; returns HTTP 200 |
 | `release_nullOrderId_alwaysExecutes` | `orderId` is null on the request | Idempotency check skipped entirely; balance reduced; transaction written (manual adjustments have no orderId) |
+
+*Edge / guard cases — protect balance integrity:*
+
+| Method | Scenario | Assert |
+|--------|----------|--------|
+| `release_holdLessThanAmount_floorsAtZero` | `cashOnHold` = $500; release requested for $1,500 | `cashOnHold` floors at $0 (not negative); `availableCash` increases by $500 only |
 
 > \* The guard only runs on subsequent calls; the first call writes the transaction, which is what subsequent calls detect.
 

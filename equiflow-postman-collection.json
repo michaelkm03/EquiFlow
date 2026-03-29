@@ -2257,6 +2257,151 @@
               "body": "[\n  {\n    \"id\": \"f6000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"AAPL\",\n    \"quantity\": 10,\n    \"averageCost\": 172.35,\n    \"updatedAt\": \"2024-03-17T17:00:04Z\"\n  },\n  {\n    \"id\": \"f6000000-0000-0000-0000-000000000002\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"ticker\": \"GOOGL\",\n    \"quantity\": 25,\n    \"averageCost\": 140.85,\n    \"updatedAt\": \"2024-03-16T10:30:00Z\"\n  }\n]"
             }
           ]
+        },
+        {
+          "name": "EQ-113b — Release Idempotency",
+          "item": [
+            {
+              "name": "Step 1 — First release (should deduct hold)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/ledger/release",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "ledger",
+                    "release"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b1000000-0000-0000-0000-000000000001\",\n  \"amount\": 1500,\n  \"description\": \"Release hold — order cancelled\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "First call — hold exists, so cashOnHold decreases and availableCash increases. A RELEASE transaction row is written to ledger_transactions."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                      "var j = pm.response.json();",
+                      "pm.test(\"availableCash increased\", () => pm.expect(j.availableCash).to.be.above(0));",
+                      "pm.collectionVariables.set(\"release_available_cash_after_first\", j.availableCash);",
+                      "console.log(\"availableCash after first release:\", j.availableCash);"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Step 2 — Duplicate release (should be no-op, same 200)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/ledger/release",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "ledger",
+                    "release"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b1000000-0000-0000-0000-000000000001\",\n  \"amount\": 1500,\n  \"description\": \"Release hold — order cancelled\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Identical second call with the same orderId. EQ-113b idempotency: a RELEASE transaction already exists for this orderId, so no DB write occurs. availableCash must equal the value from Step 1."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"200 OK — no error on duplicate\", () => pm.response.to.have.status(200));",
+                      "var j = pm.response.json();",
+                      "var first = pm.collectionVariables.get(\"release_available_cash_after_first\");",
+                      "pm.test(\"availableCash unchanged (no double-release)\", () => pm.expect(j.availableCash).to.eql(parseFloat(first)));",
+                      "console.log(\"availableCash after duplicate release:\", j.availableCash, \"(expected:\", first, \")\");"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Step 3 — Null orderId release (always executes, no idempotency check)",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/ledger/release",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "ledger",
+                    "release"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"amount\": 500,\n  \"description\": \"Manual operator adjustment — no orderId\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "No orderId in the body — the idempotency guard is skipped entirely. Release always executes. Used for manual operator adjustments that are not tied to any order."
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test(\"200 OK\", () => pm.response.to.have.status(200));",
+                      "var j = pm.response.json();",
+                      "pm.test(\"response contains availableCash\", () => pm.expect(j).to.have.property(\"availableCash\"));",
+                      "console.log(\"availableCash after manual release:\", j.availableCash);"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
         }
       ]
     },
