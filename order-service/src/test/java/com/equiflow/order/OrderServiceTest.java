@@ -16,6 +16,7 @@ import org.testng.annotations.Test;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -42,7 +43,11 @@ public class OrderServiceTest {
         orderService = new OrderService(orderRepository, matchingEngine, eventPublisher, marketHoursValidator);
     }
 
-    @Test(description = "Market order submitted during market hours returns FILLED status")
+    // -------------------------------------------------------------------------
+    // submitOrder
+    // -------------------------------------------------------------------------
+
+    @Test(description = "Market order during market hours is persisted, matched, and FILLED event published")
     public void testMarketOrderSubmission() {
         UUID userId = UUID.randomUUID();
         when(marketHoursValidator.isMarketOpen()).thenReturn(true);
@@ -81,54 +86,61 @@ public class OrderServiceTest {
 
         OrderResponse response = orderService.submitOrder(request, userId);
 
-        assertNotNull(response, "Response should not be null");
+        assertNotNull(response);
         assertEquals(response.getTicker(), "AAPL");
         assertEquals(response.getStatus(), OrderStatus.FILLED);
-        verify(eventPublisher, times(1)).publishOrderPlaced(any());
-        verify(matchingEngine, times(1)).executeMarketOrder(any());
+        // Order must be persisted and placed event published before matching
+        verify(orderRepository).save(any());
+        verify(eventPublisher).publishOrderPlaced(any());
+        verify(matchingEngine).executeMarketOrder(any());
     }
 
-    @Test(description = "Order submitted when market is closed is rejected",
-          expectedExceptions = IllegalStateException.class,
-          expectedExceptionsMessageRegExp = ".*Market is closed.*")
+    @Test(description = "Market closed — exception thrown, nothing persisted, no event published")
     public void testMarketHoursRejection() {
         when(marketHoursValidator.isMarketOpen()).thenReturn(false);
 
         OrderRequest request = new OrderRequest("AAPL", OrderSide.BUY, OrderType.MARKET,
                 new BigDecimal("10"), null, null);
 
-        orderService.submitOrder(request, UUID.randomUUID());
+        try {
+            orderService.submitOrder(request, UUID.randomUUID());
+            fail("Expected IllegalStateException for closed market");
+        } catch (IllegalStateException ex) {
+            assertTrue(ex.getMessage().contains("Market is closed"), "Wrong exception message: " + ex.getMessage());
+        }
+
+        // Rejection must be a complete no-op — nothing persisted, no event emitted
+        verify(orderRepository, never()).save(any());
+        verify(eventPublisher, never()).publishOrderPlaced(any());
     }
 
-    @Test(description = "Limit order without limit price is rejected",
-          expectedExceptions = IllegalArgumentException.class)
+    @Test(description = "LIMIT order missing limitPrice — exception thrown, nothing persisted, no event published")
     public void testLimitOrderWithoutPriceRejected() {
         when(marketHoursValidator.isMarketOpen()).thenReturn(true);
 
         OrderRequest request = new OrderRequest("AAPL", OrderSide.BUY, OrderType.LIMIT,
                 new BigDecimal("10"), null, null);
 
-        orderService.submitOrder(request, UUID.randomUUID());
-    }
+        try {
+            orderService.submitOrder(request, UUID.randomUUID());
+            fail("Expected IllegalArgumentException for missing limit price");
+        } catch (IllegalArgumentException ex) {
+            assertTrue(ex.getMessage().contains("Limit price"), "Wrong exception message: " + ex.getMessage());
+        }
 
-    @Test(description = "MarketHoursValidator correctly identifies closed weekend")
-    public void testMarketHoursValidatorWeekend() {
-        // Real validator test - weekend check
-        MarketHoursValidator validator = new MarketHoursValidator();
-        // We can't guarantee the test runs on a weekend, so just verify the method exists and returns boolean
-        boolean result = validator.isMarketOpen();
-        // Just confirm no exception thrown
-        assertTrue(result || !result, "isMarketOpen should return a boolean");
+        // Validation fires before any persistence — nothing should be saved or published
+        verify(orderRepository, never()).save(any());
+        verify(eventPublisher, never()).publishOrderPlaced(any());
     }
 
     // -------------------------------------------------------------------------
     // EQ-113b — systemCancelOrder: cancellable states
-    // Each test verifies status change: status → CANCELLED + event
+    // Each test verifies status → CANCELLED, save called, event published
     // -------------------------------------------------------------------------
 
-    @Test(description = "PENDING order is cancelled and event published")
+    @Test(description = "PENDING order is cancelled — save called, event published")
     public void systemCancel_pendingOrder_cancels() {
-        // PENDING: order submitted, not yet compliance-checked
+        // PENDING: order submitted but not yet compliance-checked
         stubRepo(OrderStatus.PENDING);
         OrderResponse response = orderService.systemCancelOrder(ORDER_ID, USER_ID);
         assertEquals(response.getStatus(), OrderStatus.CANCELLED);
@@ -136,9 +148,9 @@ public class OrderServiceTest {
         verify(eventPublisher).publishOrderCancelled(any());
     }
 
-    @Test(description = "COMPLIANCE_CHECK order is cancelled and event published")
+    @Test(description = "COMPLIANCE_CHECK order is cancelled — save called, event published")
     public void systemCancel_complianceCheckOrder_cancels() {
-        // COMPLIANCE_CHECK: mid-saga step 1 — order not yet matched
+        // COMPLIANCE_CHECK: mid-saga step 1 — not yet matched, safe to cancel
         stubRepo(OrderStatus.COMPLIANCE_CHECK);
         OrderResponse response = orderService.systemCancelOrder(ORDER_ID, USER_ID);
         assertEquals(response.getStatus(), OrderStatus.CANCELLED);
@@ -146,7 +158,7 @@ public class OrderServiceTest {
         verify(eventPublisher).publishOrderCancelled(any());
     }
 
-    @Test(description = "OPEN order is cancelled and event published")
+    @Test(description = "OPEN order is cancelled — save called, event published")
     public void systemCancel_openOrder_cancels() {
         // OPEN: resting in order book, not yet matched
         stubRepo(OrderStatus.OPEN);
@@ -156,9 +168,9 @@ public class OrderServiceTest {
         verify(eventPublisher).publishOrderCancelled(any());
     }
 
-    @Test(description = "PENDING_TRIGGER order is cancelled and event published")
+    @Test(description = "PENDING_TRIGGER order is cancelled — save called, event published")
     public void systemCancel_pendingTriggerOrder_cancels() {
-        // PENDING_TRIGGER: stop-loss set but price not yet hit
+        // PENDING_TRIGGER: stop-loss set but trigger price not yet hit
         stubRepo(OrderStatus.PENDING_TRIGGER);
         OrderResponse response = orderService.systemCancelOrder(ORDER_ID, USER_ID);
         assertEquals(response.getStatus(), OrderStatus.CANCELLED);
@@ -166,9 +178,9 @@ public class OrderServiceTest {
         verify(eventPublisher).publishOrderCancelled(any());
     }
 
-    @Test(description = "TRIGGERED order is cancelled and event published")
+    @Test(description = "TRIGGERED order is cancelled — save called, event published")
     public void systemCancel_triggeredOrder_cancels() {
-        // TRIGGERED: stop-loss price hit but order not yet re-submitted to matching
+        // TRIGGERED: stop-loss fired but order not yet re-submitted to matching
         stubRepo(OrderStatus.TRIGGERED);
         OrderResponse response = orderService.systemCancelOrder(ORDER_ID, USER_ID);
         assertEquals(response.getStatus(), OrderStatus.CANCELLED);
@@ -178,10 +190,10 @@ public class OrderServiceTest {
 
     // -------------------------------------------------------------------------
     // EQ-113b — systemCancelOrder: already-terminal no-ops
-    // Compensation may be called twice; must be safe and return 200 with no write
+    // Compensation may be called twice; safe with no DB write or event
     // -------------------------------------------------------------------------
 
-    @Test(description = "CANCELLED order is a no-op — no DB write, no event")
+    @Test(description = "CANCELLED order is a no-op — no save, no event")
     public void systemCancel_alreadyCancelled_isNoOp() {
         stubRepo(OrderStatus.CANCELLED);
         OrderResponse response = orderService.systemCancelOrder(ORDER_ID, USER_ID);
@@ -190,7 +202,7 @@ public class OrderServiceTest {
         verify(eventPublisher, never()).publishOrderCancelled(any());
     }
 
-    @Test(description = "REJECTED order is a no-op — no DB write, no event")
+    @Test(description = "REJECTED order is a no-op — no save, no event")
     public void systemCancel_rejectedOrder_isNoOp() {
         stubRepo(OrderStatus.REJECTED);
         OrderResponse response = orderService.systemCancelOrder(ORDER_ID, USER_ID);
@@ -199,7 +211,7 @@ public class OrderServiceTest {
         verify(eventPublisher, never()).publishOrderCancelled(any());
     }
 
-    @Test(description = "FAILED order is a no-op — no DB write, no event")
+    @Test(description = "FAILED order is a no-op — no save, no event")
     public void systemCancel_failedOrder_isNoOp() {
         stubRepo(OrderStatus.FAILED);
         OrderResponse response = orderService.systemCancelOrder(ORDER_ID, USER_ID);
@@ -210,25 +222,36 @@ public class OrderServiceTest {
 
     // -------------------------------------------------------------------------
     // EQ-113b — systemCancelOrder: money-moved states
-    // Order was matched before compensation ran — ops must reconcile manually
+    // Matching already ran — exception thrown, no side effects
     // -------------------------------------------------------------------------
 
-    @Test(description = "FILLED order throws — money already moved, ops must reconcile",
-          expectedExceptions = IllegalStateException.class,
-          expectedExceptionsMessageRegExp = ".*ORDER_IN_TERMINAL_STATE.*")
+    @Test(description = "FILLED order throws ORDER_IN_TERMINAL_STATE — no save, no event")
     public void systemCancel_filledOrder_returns409() {
-        // FILLED: matching already ran and debited the ledger — cannot reverse here
+        // FILLED: matching ran and debited the ledger — cannot reverse without manual reconciliation
         stubRepo(OrderStatus.FILLED);
-        orderService.systemCancelOrder(ORDER_ID, USER_ID);
+        try {
+            orderService.systemCancelOrder(ORDER_ID, USER_ID);
+            fail("Expected IllegalStateException for FILLED order");
+        } catch (IllegalStateException ex) {
+            assertTrue(ex.getMessage().contains("ORDER_IN_TERMINAL_STATE"), "Wrong exception message: " + ex.getMessage());
+        }
+        // Exception must be thrown before any persistence or event
+        verify(orderRepository, never()).save(any());
+        verify(eventPublisher, never()).publishOrderCancelled(any());
     }
 
-    @Test(description = "PARTIALLY_FILLED order throws — partial fill treated same as FILLED",
-          expectedExceptions = IllegalStateException.class,
-          expectedExceptionsMessageRegExp = ".*ORDER_IN_TERMINAL_STATE.*")
+    @Test(description = "PARTIALLY_FILLED order throws ORDER_IN_TERMINAL_STATE — no save, no event")
     public void systemCancel_partiallyFilledOrder_returns409() {
-        // PARTIALLY_FILLED: some shares were matched; money partially moved
+        // PARTIALLY_FILLED: partial fill means money partially moved — treated same as FILLED
         stubRepo(OrderStatus.PARTIALLY_FILLED);
-        orderService.systemCancelOrder(ORDER_ID, USER_ID);
+        try {
+            orderService.systemCancelOrder(ORDER_ID, USER_ID);
+            fail("Expected IllegalStateException for PARTIALLY_FILLED order");
+        } catch (IllegalStateException ex) {
+            assertTrue(ex.getMessage().contains("ORDER_IN_TERMINAL_STATE"), "Wrong exception message: " + ex.getMessage());
+        }
+        verify(orderRepository, never()).save(any());
+        verify(eventPublisher, never()).publishOrderCancelled(any());
     }
 
     // -------------------------------------------------------------------------
@@ -239,17 +262,17 @@ public class OrderServiceTest {
           expectedExceptions = IllegalArgumentException.class,
           expectedExceptionsMessageRegExp = ".*Order not found.*")
     public void systemCancel_orderNotFound_throws() {
-        // findByIdAndUserId returns empty when order does not exist
-        when(orderRepository.findByIdAndUserId(ORDER_ID, USER_ID)).thenReturn(java.util.Optional.empty());
+        // findByIdAndUserId returns empty when the order does not exist for this user
+        when(orderRepository.findByIdAndUserId(ORDER_ID, USER_ID)).thenReturn(Optional.empty());
         orderService.systemCancelOrder(ORDER_ID, USER_ID);
     }
 
-    @Test(description = "Wrong userId throws — findByIdAndUserId returns empty for mismatched user",
+    @Test(description = "Wrong userId throws — repo returns empty for mismatched user",
           expectedExceptions = IllegalArgumentException.class)
     public void systemCancel_wrongUser_throws() {
         // Repository filters by both orderId AND userId — wrong userId yields empty Optional
         UUID wrongUserId = UUID.randomUUID();
-        when(orderRepository.findByIdAndUserId(ORDER_ID, wrongUserId)).thenReturn(java.util.Optional.empty());
+        when(orderRepository.findByIdAndUserId(ORDER_ID, wrongUserId)).thenReturn(Optional.empty());
         orderService.systemCancelOrder(ORDER_ID, wrongUserId);
     }
 
@@ -257,10 +280,10 @@ public class OrderServiceTest {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /** Stubs repository to return an order with the given status, and save() to echo it back. */
+    /** Stubs repo to return an order with the given status; save() echoes back with CANCELLED set. */
     private void stubRepo(OrderStatus status) {
         Order order = buildOrder(USER_ID, status);
-        when(orderRepository.findByIdAndUserId(ORDER_ID, USER_ID)).thenReturn(java.util.Optional.of(order));
+        when(orderRepository.findByIdAndUserId(ORDER_ID, USER_ID)).thenReturn(Optional.of(order));
         when(orderRepository.save(any(Order.class))).thenAnswer(inv -> {
             Order saved = inv.getArgument(0);
             saved.setStatus(OrderStatus.CANCELLED);
