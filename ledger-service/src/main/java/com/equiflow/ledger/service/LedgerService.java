@@ -67,6 +67,12 @@ public class LedgerService {
     public AccountResponse release(HoldRequest request) {
         Account account = accountRepository.findByUserIdForUpdate(request.getUserId())
                 .orElseThrow(() -> new IllegalArgumentException("Account not found: " + request.getUserId()));
+                
+        if (request.getOrderId() != null &&
+                transactionRepository.existsByOrderIdAndType(request.getOrderId(), "RELEASE")) {
+            log.info("Duplicate release detected for orderId={}, returning current state", request.getOrderId());
+            return toResponse(account);
+        }
 
         BigDecimal newHold = account.getCashOnHold().subtract(request.getAmount())
                 .max(BigDecimal.ZERO);

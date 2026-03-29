@@ -29,7 +29,8 @@ public class SecurityConfig {
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
                     "/swagger-ui.html",
-                    "/orders/*/match",          // internal: saga-orchestrator
+                    "/orders/*/match",           // internal: saga-orchestrator
+                    "/orders/*/system-cancel",   // internal: saga-orchestrator compensation
                     "/orders/internal/**"        // internal: market-data-service
                 ).permitAll()
                 .anyRequest().authenticated()

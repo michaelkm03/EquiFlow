@@ -39,7 +39,12 @@ public class OrderEventPublisher {
     public void publishOrderCancelled(Order order) {
         Map<String, Object> event = buildEvent("ORDER_CANCELLED", order);
         kafkaTemplate.send(TOPIC_CANCELLED, order.getId().toString(), event);
-        log.info("Published ORDER_CANCELLED event for order: {}", order.getId());
+        try {
+            log.info("Published ORDER_CANCELLED topic={} key={} message={}",
+                    TOPIC_CANCELLED, order.getId(), objectMapper.writeValueAsString(event));
+        } catch (Exception e) {
+            log.info("Published ORDER_CANCELLED topic={} key={}", TOPIC_CANCELLED, order.getId());
+        }
     }
 
     public void publishStopLossTriggered(Order order) {
