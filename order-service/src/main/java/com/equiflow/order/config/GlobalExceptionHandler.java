@@ -39,6 +39,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, Object>> handleIllegalState(
             IllegalStateException ex, WebRequest request) {
+        // ORDER_IN_TERMINAL_STATE:STATUS:orderId — return structured 409 body per AC
+        if (ex.getMessage() != null && ex.getMessage().startsWith("ORDER_IN_TERMINAL_STATE:")) {
+            String[] parts = ex.getMessage().split(":");
+            Map<String, Object> body = new HashMap<>();
+            body.put("error", "ORDER_IN_TERMINAL_STATE");
+            body.put("status", parts.length > 1 ? parts[1] : "UNKNOWN");
+            body.put("orderId", parts.length > 2 ? parts[2] : null);
+            body.put("timestamp", Instant.now());
+            body.put("service", "order-service");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
+        }
         return errorResponse(HttpStatus.CONFLICT, ex.getMessage(), request.getDescription(false));
     }
 

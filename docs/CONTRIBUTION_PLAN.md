@@ -506,10 +506,10 @@ mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest#failSaga_setsCompensa
 **Services Affected:** `order-service`, `ledger-service`.
 
 **Acceptance Criteria:**
-- [ ] `POST /orders/{orderId}/system-cancel` cancels a `PENDING`, `COMPLIANCE_CHECK`, `OPEN`, `PENDING_TRIGGER`, or `TRIGGERED` order; returns HTTP 200; publishes `order.cancelled`
-- [ ] System-cancel on `CANCELLED`, `REJECTED`, or `FAILED` returns HTTP 200 with no DB change
-- [ ] System-cancel on `FILLED` or `PARTIALLY_FILLED` returns HTTP 409 with `ORDER_IN_TERMINAL_STATE` body; WARN logged
-- [ ] `LedgerService.release()` called twice with the same orderId: second call returns HTTP 200; `cash_on_hold` unchanged; no second RELEASE transaction written
+- [x] `POST /orders/{orderId}/system-cancel` cancels a `PENDING`, `COMPLIANCE_CHECK`, `OPEN`, `PENDING_TRIGGER`, or `TRIGGERED` order; returns HTTP 200; publishes `order.cancelled`
+- [x] System-cancel on `CANCELLED`, `REJECTED`, or `FAILED` returns HTTP 200 with no DB change
+- [x] System-cancel on `FILLED` or `PARTIALLY_FILLED` returns HTTP 409 with `{ "error": "ORDER_IN_TERMINAL_STATE", "status": "...", "orderId": "..." }`; WARN logged
+- [x] `LedgerService.release()` called twice with the same orderId: second call returns HTTP 200; `cash_on_hold` unchanged; no second RELEASE transaction written
 
 **Test Cases — `OrderServiceTest` (unit, Mockito):**
 
@@ -551,7 +551,7 @@ mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest#failSaga_setsCompensa
 
 | Method | Scenario | Assert |
 |--------|----------|--------|
-| `release_firstCall_reducesHoldAndWritesTransaction` | `cashOnHold` = $1,500; release $1,500 for orderId X | `cashOnHold` → $0; one `RELEASE` transaction written; `existsByOrderIdAndType` not called for first call* |
+| `release_firstCall_reducesHoldAndWritesTransaction` | `cashOnHold` = $1,500; release $1,500 for orderId X | `cashOnHold` → $0; one `RELEASE` transaction written; guard evaluated but returns false (no prior RELEASE exists) |
 
 *Idempotency — the recovery job or a retry may call release() more than once for the same order:*
 
@@ -566,11 +566,9 @@ mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest#failSaga_setsCompensa
 |--------|----------|--------|
 | `release_holdLessThanAmount_floorsAtZero` | `cashOnHold` = $500; release requested for $1,500 | `cashOnHold` floors at $0 (not negative); `availableCash` increases by $500 only |
 
-> \* The guard only runs on subsequent calls; the first call writes the transaction, which is what subsequent calls detect.
-
 ```bash
 mvn test -pl order-service -Dtest=OrderServiceTest
-mvn test -pl ledger-service -Dtest=LedgerServiceTest#release_duplicateOrderId_isNoOp,LedgerServiceTest#release_nullOrderId_alwaysExecutes
+mvn test -pl ledger-service -Dtest=LedgerServiceTest
 ```
 
 ---

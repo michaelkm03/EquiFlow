@@ -106,6 +106,71 @@ public class LedgerServiceTest {
         assertEquals(response.getCashOnHold().compareTo(BigDecimal.ZERO), 0);
     }
 
+    // -------------------------------------------------------------------------
+    // EQ-113b — release idempotency
+    // SagaRecoveryJob may retry compensation; second release must not mutate state
+    // -------------------------------------------------------------------------
+
+    @Test(description = "First release reduces hold and writes RELEASE transaction")
+    public void release_firstCall_reducesHoldAndWritesTransaction() {
+        // A RELEASE transaction does not yet exist for this orderId — normal path executes
+        when(accountRepository.findByUserIdForUpdate(USER_ID))
+                .thenReturn(Optional.of(account(new BigDecimal("100000.00"), new BigDecimal("1500.00"))));
+        when(transactionRepository.existsByOrderIdAndType(ORDER_ID, "RELEASE")).thenReturn(false);
+
+        var response = ledgerService.release(holdRequest(new BigDecimal("1500.00")));
+
+        assertEquals(response.getCashOnHold().compareTo(BigDecimal.ZERO), 0,
+                "cashOnHold should be fully released");
+        verify(accountRepository).save(any());
+        verify(transactionRepository).save(argThat(tx -> "RELEASE".equals(tx.getType())));
+    }
+
+    @Test(description = "Duplicate release with same orderId is a no-op — no balance change, no second transaction")
+    public void release_duplicateOrderId_isNoOp() {
+        // A RELEASE transaction already exists — idempotency guard returns early
+        when(accountRepository.findByUserIdForUpdate(USER_ID))
+                .thenReturn(Optional.of(account(new BigDecimal("100000.00"), BigDecimal.ZERO)));
+        when(transactionRepository.existsByOrderIdAndType(ORDER_ID, "RELEASE")).thenReturn(true);
+
+        var response = ledgerService.release(holdRequest(new BigDecimal("1500.00")));
+
+        // cashOnHold unchanged — no second release applied
+        assertEquals(response.getCashOnHold().compareTo(BigDecimal.ZERO), 0);
+        verify(accountRepository, never()).save(any());
+        verify(transactionRepository, never()).save(any());
+    }
+
+    @Test(description = "Null orderId skips idempotency guard — manual adjustments always execute")
+    public void release_nullOrderId_alwaysExecutes() {
+        // No orderId means this is a manual operator adjustment, not saga-driven — never deduplicated
+        when(accountRepository.findByUserIdForUpdate(USER_ID))
+                .thenReturn(Optional.of(account(new BigDecimal("100000.00"), new BigDecimal("1500.00"))));
+
+        HoldRequest request = new HoldRequest(USER_ID, null, new BigDecimal("1500.00"), "manual adjustment");
+        var response = ledgerService.release(request);
+
+        // Guard skipped — release executed normally
+        assertEquals(response.getCashOnHold().compareTo(BigDecimal.ZERO), 0);
+        verify(accountRepository).save(any());
+        verify(transactionRepository, never()).existsByOrderIdAndType(any(), any());
+    }
+
+    @Test(description = "Release amount exceeds hold — cashOnHold floors at zero, no negative balance")
+    public void release_holdLessThanAmount_floorsAtZero() {
+        // cashOnHold = $500, releasing $1,500 — .max(ZERO) prevents negative hold
+        when(accountRepository.findByUserIdForUpdate(USER_ID))
+                .thenReturn(Optional.of(account(new BigDecimal("100000.00"), new BigDecimal("500.00"))));
+        when(transactionRepository.existsByOrderIdAndType(ORDER_ID, "RELEASE")).thenReturn(false);
+
+        var response = ledgerService.release(holdRequest(new BigDecimal("1500.00")));
+
+        assertEquals(response.getCashOnHold().compareTo(BigDecimal.ZERO), 0,
+                "cashOnHold must not go negative");
+        // availableCash increases by the actual hold released ($500), not the requested $1,500
+        assertEquals(response.getAvailableCash(), new BigDecimal("100000.00"));
+    }
+
     // --- debit ---
 
     @Test(description = "Debit reduces cashBalance and releases matching hold")

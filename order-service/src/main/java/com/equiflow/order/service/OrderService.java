@@ -151,7 +151,7 @@ public class OrderService {
             case FILLED, PARTIALLY_FILLED -> {
                 log.warn("systemCancel blocked for orderId={} status={} — money already moved",
                         orderId, order.getStatus());
-                throw new IllegalStateException("ORDER_IN_TERMINAL_STATE:" + order.getStatus());
+                throw new IllegalStateException("ORDER_IN_TERMINAL_STATE:" + order.getStatus() + ":" + orderId);
             }
             default -> {
                 order.setStatus(OrderStatus.CANCELLED);

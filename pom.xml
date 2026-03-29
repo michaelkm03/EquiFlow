@@ -167,7 +167,7 @@
                         </dependency>
                     </dependencies>
                     <configuration>
-                        <argLine>@{argLine} --enable-preview</argLine>
+                        <argLine>@{argLine} --enable-preview -Dnet.bytebuddy.experimental=true</argLine>
                     </configuration>
                 </plugin>
                 <plugin>
