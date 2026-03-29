@@ -578,66 +578,109 @@ mvn test -pl ledger-service -Dtest=LedgerServiceTest
 |------|------|--------|----------|
 | Platform | Engineering | 3 | P0 — depends on EQ-113a, EQ-113b |
 
-> **Scope:** `saga-orchestrator` only. Wires cancel + release Feign calls into `failSaga()`, records SagaStep outcomes, and adds the scheduled recovery job. Depends on EQ-113a (COMPENSATING checkpoint already in place) and EQ-113b (target services are idempotent).
+> **Scope:** `saga-orchestrator` only. Wires cancel + release Feign calls into `failSaga()`, records compensation SagaSteps, and adds the scheduled recovery job. EQ-113a (COMPENSATING checkpoint) and EQ-113b (`systemCancelOrder` + `release` idempotency) are prerequisites and already complete.
+
+**Prerequisites already in place:**
+- `OrderClient.systemCancelOrder(orderId, body)` — added in EQ-113b
+- `LedgerClient.release(body)` — already existed
+- `failSaga()` writes COMPENSATING before FAILED — added in EQ-113a
 
 **Changes:**
 
-1. **`OrderClient`** — add `cancelOrder(orderId, userId)` Feign method calling `POST /orders/{orderId}/system-cancel`
-2. **`failSaga()` compensation steps** — after writing COMPENSATING (EQ-113a), run per failed step:
-   - Step 1 (compliance): no Feign calls. Set saga → FAILED.
-   - Step 2 (matching): call `cancelOrder()`. Record `COMPENSATION_CANCEL` SagaStep. Set saga → FAILED.
-   - Step 3 (debit): call `cancelOrder()` then `release()` independently — each in its own try/catch so one failure does not block the other. Record both SagaSteps. Set saga → FAILED.
-3. **SagaStep recording** — write `COMPENSATION_CANCEL` or `COMPENSATION_RELEASE` SagaStep with status=COMPLETED or FAILED + error message on failure. Before each call, check if a COMPLETED SagaStep already exists for that step — skip the call if so.
-4. **`SagaRecoveryJob`** — `@Scheduled` every 60s. Queries sagas in COMPENSATING state older than 2 minutes. For each: reads existing SagaSteps, skips already-COMPLETED steps, re-runs missing ones via the same compensation entry point as normal `failSaga()` flow.
-5. **Logging** — all compensation log lines include: orderId, userId, step, outcome, reason on failure.
+1. **`failSaga()` signature** — add `int failedStep` parameter so compensation logic knows which steps to undo:
+   ```java
+   private Saga failSaga(Saga saga, String reason, int failedStep)
+   ```
+   Update all three callers in `execute()`:
+   - Step 1 failures: `failSaga(saga, reason, 1)`
+   - Step 2 failure: `failSaga(saga, reason, 2)`
+   - Step 3 failure: `failSaga(saga, reason, 3)`
 
-**What applies per failed step:**
+2. **Compensation logic inside `failSaga()`** — after writing COMPENSATING (EQ-113a), run based on `failedStep`:
 
-| Step failed | Cancel Order | Release Hold |
-|-------------|-------------|-------------|
-| Step 1 — Compliance | No | No |
-| Step 2 — Matching | Yes | No |
-| Step 3 — Debit | Yes | Yes |
+   | `failedStep` | Cancel Order | Release Hold |
+   |-------------|-------------|-------------|
+   | 1 — Compliance | No | No |
+   | 2 — Matching | Yes | No |
+   | 3 — Debit | Yes | Yes |
 
-**Logging format:**
-```
-INFO  saga_compensation step=CANCEL orderId={} userId={} outcome=COMPLETED
-ERROR saga_compensation step=RELEASE orderId={} userId={} amount={} outcome=FAILED reason={}
-WARN  saga_compensation_anomaly step=CANCEL orderId={} userId={} orderStatus=FILLED
-```
+   Cancel and release run in **independent try/catch blocks** — a cancel failure must not prevent the release from running.
+
+3. **Compensation SagaStep recording** — for each Feign call attempted, write a `SagaStep` with:
+   - `stepName`: `COMPENSATION_CANCEL` or `COMPENSATION_RELEASE`
+   - `status`: `COMPLETED` on success, `FAILED` + `errorMessage` on exception
+   - **Idempotency guard**: before each call, check `saga.getSteps()` for an existing `COMPLETED` step with that name — skip the Feign call if found. This makes re-runs by `SagaRecoveryJob` safe.
+
+4. **`SagaRepository`** — add query for stuck COMPENSATING sagas:
+   ```java
+   List<Saga> findByStatusAndUpdatedAtBefore(String status, Instant cutoff);
+   ```
+
+5. **`SagaRecoveryJob`** — `@Scheduled(fixedDelay = 60_000)`. Every 60 seconds:
+   - Queries sagas in `COMPENSATING` state with `updatedAt` older than 2 minutes (avoids racing with in-progress compensation)
+   - For each saga: reads `currentStep` to determine which compensation steps apply, reads existing `SagaStep` records to skip already-completed ones, calls the same compensation path as `failSaga()` for the missing steps
+
+6. **Logging** — every compensation action logs at INFO (success) or ERROR (failure):
+   ```
+   INFO  saga_compensation step=CANCEL  orderId={} userId={} outcome=COMPLETED
+   ERROR saga_compensation step=RELEASE orderId={} userId={} outcome=FAILED reason={}
+   WARN  saga_compensation_anomaly step=CANCEL orderId={} userId={} — order was FILLED
+   ```
 
 **Services Affected:** `saga-orchestrator` only.
 
 **Acceptance Criteria:**
-- [ ] Step 1 failure: no Feign calls made; saga → FAILED; no COMPENSATION SagaSteps written
-- [ ] Step 2 failure: `cancelOrder()` called once; `COMPENSATION_CANCEL` SagaStep written; saga → FAILED
-- [ ] Step 3 failure: `cancelOrder()` and `release()` both called independently; both SagaSteps written; saga → FAILED
-- [ ] If cancel Feign call fails, release still runs; `COMPENSATION_CANCEL` SagaStep written with status=FAILED; saga reaches FAILED
-- [ ] If release Feign call fails, `COMPENSATION_RELEASE` SagaStep written with status=FAILED; saga reaches FAILED
-- [ ] Compensation step is skipped if its SagaStep already exists with status=COMPLETED
-- [ ] `SagaRecoveryJob` runs every 60 seconds; skips sagas in COMPENSATING state newer than 2 minutes
-- [ ] Recovery job re-runs only missing compensation steps; skips completed ones
-- [ ] All compensation log lines include orderId, userId, step, outcome, reason
+- [ ] Step 1 failure: `cancelOrder()` and `release()` are not called; saga reaches `FAILED`; no `COMPENSATION_*` SagaSteps written
+- [ ] Step 2 failure: `cancelOrder()` called exactly once with correct `orderId` + `userId`; `COMPENSATION_CANCEL` SagaStep written with `status=COMPLETED`; saga reaches `FAILED`
+- [ ] Step 3 failure: `cancelOrder()` and `release()` both called; `COMPENSATION_CANCEL` and `COMPENSATION_RELEASE` SagaSteps both written; saga reaches `FAILED`
+- [ ] Cancel Feign call throws: `COMPENSATION_CANCEL` SagaStep written with `status=FAILED` + error message; release still runs; `COMPENSATION_RELEASE` SagaStep written; saga reaches `FAILED`
+- [ ] Release Feign call throws: `COMPENSATION_RELEASE` SagaStep written with `status=FAILED` + error message; saga reaches `FAILED`; cancel result is unaffected
+- [ ] `COMPENSATION_CANCEL` SagaStep already `COMPLETED`: `cancelOrder()` not called; release runs normally
+- [ ] `COMPENSATION_RELEASE` SagaStep already `COMPLETED`: `release()` not called; saga reaches `FAILED`
+- [ ] `SagaRecoveryJob` runs every 60 seconds; sagas in `COMPENSATING` newer than 2 minutes are skipped
+- [ ] Recovery job skips compensation steps whose SagaStep is already `COMPLETED`; calls only the missing ones
+- [ ] All compensation log lines include `orderId`, `userId`, step name, outcome, and reason on failure
 
 **Test Cases — `SagaCompensationTest` (unit, Mockito):**
 
-| Scenario | Mock setup | Assert |
-|----------|------------|--------|
-| Step 1 fails | `complianceClient.check()` throws | saga=FAILED; no cancel/release called; no COMPENSATION SagaSteps |
-| Step 2 fails | `orderClient.triggerMatch()` throws | saga=FAILED; `cancelOrder()` called once; COMPENSATION_CANCEL step=COMPLETED |
-| Step 3 fails | `ledgerClient.debit()` throws | saga=FAILED; cancel + release both called; both steps recorded |
-| Cancel Feign fails, release succeeds | `cancelOrder()` throws | saga=FAILED; COMPENSATION_CANCEL step=FAILED; COMPENSATION_RELEASE step=COMPLETED |
-| Release Feign fails, cancel succeeds | `release()` throws | saga=FAILED; COMPENSATION_CANCEL step=COMPLETED; COMPENSATION_RELEASE step=FAILED |
-| COMPENSATION_CANCEL already COMPLETED | Pre-existing SagaStep present | `cancelOrder()` not called; release() still runs |
+*Compensation per failed step — verifies which Feign calls are made and what SagaSteps are recorded:*
+
+| Method | Mock setup | Assert |
+|--------|------------|--------|
+| `failSaga_step1_noCompensationCalls` | `complianceClient.check()` throws | `cancelOrder()` never called; `release()` never called; no `COMPENSATION_*` SagaSteps; saga=`FAILED` |
+| `failSaga_step2_cancelOrderCalled` | `orderClient.triggerMatch()` throws; `cancelOrder()` succeeds | `cancelOrder()` called once with correct orderId+userId; `COMPENSATION_CANCEL` step=`COMPLETED`; saga=`FAILED` |
+| `failSaga_step3_cancelAndReleaseBothCalled` | `ledgerClient.debit()` throws; both Feign calls succeed | `cancelOrder()` and `release()` both called; both SagaSteps written as `COMPLETED`; saga=`FAILED` |
+
+*Partial Feign failure — one compensation call fails, the other must still execute:*
+
+| Method | Mock setup | Assert |
+|--------|------------|--------|
+| `failSaga_cancelFails_releaseStillRuns` | `cancelOrder()` throws; `release()` succeeds | `COMPENSATION_CANCEL` step=`FAILED` with error message; `COMPENSATION_RELEASE` step=`COMPLETED`; saga=`FAILED` |
+| `failSaga_releaseFails_cancelUnaffected` | `cancelOrder()` succeeds; `release()` throws | `COMPENSATION_CANCEL` step=`COMPLETED`; `COMPENSATION_RELEASE` step=`FAILED` with error message; saga=`FAILED` |
+
+*Idempotency — recovery job re-runs must skip already-completed steps:*
+
+| Method | Mock setup | Assert |
+|--------|------------|--------|
+| `failSaga_cancelAlreadyCompleted_skipsCancel` | Saga has existing `COMPENSATION_CANCEL` step=`COMPLETED` | `cancelOrder()` not called; `release()` still runs; `COMPENSATION_RELEASE` SagaStep written |
+| `failSaga_releaseAlreadyCompleted_skipsRelease` | Saga has existing `COMPENSATION_RELEASE` step=`COMPLETED` | `release()` not called; saga reaches `FAILED` |
 
 **Test Cases — `SagaRecoveryJobTest` (unit, Mockito):**
 
-| Scenario | Assert |
-|----------|--------|
-| No COMPENSATING sagas | No compensation called |
-| Saga in COMPENSATING < 2 min | Skipped — not yet eligible |
-| Saga in COMPENSATING > 2 min, no steps done | Compensation entry point called for all steps |
-| Saga in COMPENSATING > 2 min, cancel done | Cancel skipped; release called |
+*Scheduling and eligibility — only old enough COMPENSATING sagas are processed:*
+
+| Method | Mock setup | Assert |
+|--------|------------|--------|
+| `recoveryJob_noCompensatingSagas_doesNothing` | Repository returns empty list | No compensation calls made |
+| `recoveryJob_sagaYoungerThan2Min_isSkipped` | Saga `updatedAt` = 1 minute ago | Compensation not called; saga state unchanged |
+| `recoveryJob_sagaOlderThan2Min_runsCompensation` | Saga `updatedAt` = 5 minutes ago, `currentStep=3`, no SagaSteps present | `cancelOrder()` and `release()` both called; both SagaSteps written |
+
+*Step-aware recovery — only missing steps are re-run:*
+
+| Method | Mock setup | Assert |
+|--------|------------|--------|
+| `recoveryJob_cancelAlreadyDone_onlyRunsRelease` | Saga `currentStep=3`; `COMPENSATION_CANCEL` step=`COMPLETED` present | `cancelOrder()` not called; `release()` called once |
+| `recoveryJob_bothStepsDone_noCallsMade` | Both `COMPENSATION_CANCEL` and `COMPENSATION_RELEASE` steps=`COMPLETED` | No Feign calls made; saga set to `FAILED` |
 
 ```bash
 mvn test -pl saga-orchestrator -Dtest=SagaCompensationTest
