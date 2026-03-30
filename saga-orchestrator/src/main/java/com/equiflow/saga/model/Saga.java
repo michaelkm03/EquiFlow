@@ -49,6 +49,9 @@ public class Saga {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
     @OneToMany(mappedBy = "saga", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @Builder.Default
     @JsonManagedReference
@@ -57,5 +60,11 @@ public class Saga {
     @PrePersist
     protected void onCreate() {
         startedAt = Instant.now();
+        updatedAt = Instant.now();
+    }
+
+    @PreUpdate
+    protected void onUpdate() {
+        updatedAt = Instant.now();
     }
 }
