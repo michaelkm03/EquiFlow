@@ -2934,7 +2934,7 @@
               "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"COMPLETED\",\n  \"currentStep\": 5,\n  \"failureReason\": null,\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:05Z\",\n  \"steps\": [\n    { \"stepNumber\": 1, \"stepName\": \"COMPLIANCE_CHECK\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:01Z\" },\n    { \"stepNumber\": 2, \"stepName\": \"HOLD_FUNDS\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:02Z\" },\n    { \"stepNumber\": 3, \"stepName\": \"MATCH_ORDER\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:03Z\" },\n    { \"stepNumber\": 4, \"stepName\": \"DEBIT_FUNDS\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:04Z\" },\n    { \"stepNumber\": 5, \"stepName\": \"CREATE_SETTLEMENT\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:05Z\" }\n  ]\n}"
             },
             {
-              "name": "200 OK — failed saga (with compensation)",
+              "name": "200 OK — failed saga step1 (no compensation)",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -2950,7 +2950,28 @@
                   "value": "application/json"
                 }
               ],
-              "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000099\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"FAILED\",\n  \"currentStep\": 1,\n  \"failureReason\": \"Compliance check failed: INSUFFICIENT_FUNDS\",\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:01Z\",\n  \"steps\": [\n    { \"stepNumber\": 1, \"stepName\": \"COMPLIANCE_CHECK\", \"status\": \"FAILED\", \"errorMessage\": \"INSUFFICIENT_FUNDS\", \"executedAt\": \"2024-03-17T17:00:01Z\" }\n  ]\n}"
+              "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000099\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"FAILED\",\n  \"currentStep\": 1,\n  \"failureReason\": \"Compliance check failed: INSUFFICIENT_FUNDS\",\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:01Z\",\n  \"steps\": [\n    { \"stepNumber\": 1, \"stepName\": \"COMPLIANCE_CHECK\", \"status\": \"FAILED\", \"errorMessage\": \"INSUFFICIENT_FUNDS\", \"executedAt\": \"2024-03-17T17:00:01Z\" }\n  ]\n}",
+              "description": "Step 1 (COMPLIANCE_CHECK) failed — no downstream state written so no compensation steps are recorded."
+            },
+            {
+              "name": "200 OK — failed saga step3 with compensation steps (EQ-113c)",
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/saga/c3000000-0000-0000-0000-000000000098"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000098\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000098\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"FAILED\",\n  \"currentStep\": 3,\n  \"failureReason\": \"Ledger debit failed: insufficient funds\",\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:04Z\",\n  \"steps\": [\n    { \"stepNumber\": 1, \"stepName\": \"COMPLIANCE_CHECK\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:01Z\" },\n    { \"stepNumber\": 2, \"stepName\": \"ORDER_MATCHING\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:02Z\" },\n    { \"stepNumber\": 3, \"stepName\": \"LEDGER_DEBIT\", \"status\": \"FAILED\", \"errorMessage\": \"insufficient funds\", \"executedAt\": \"2024-03-17T17:00:03Z\" },\n    { \"stepName\": \"COMPENSATION_CANCEL\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:03Z\" },\n    { \"stepName\": \"COMPENSATION_RELEASE\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:04Z\" }\n  ]\n}",
+              "description": "Step 3 (LEDGER_DEBIT) failed — order was matched so cancel + release both run. EQ-113c wires these Feign calls and records COMPENSATION_CANCEL and COMPENSATION_RELEASE SagaSteps."
             }
           ]
         },
@@ -3031,6 +3052,46 @@
                 }
               ],
               "body": "[\n  {\n    \"id\": \"c3000000-0000-0000-0000-000000000001\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"status\": \"COMPLETED\",\n    \"currentStep\": 5,\n    \"failureReason\": null,\n    \"startedAt\": \"2024-03-17T17:00:00Z\",\n    \"completedAt\": \"2024-03-17T17:00:05Z\",\n    \"steps\": []\n  }\n]"
+            },
+            {
+              "name": "200 OK — FAILED sagas (EQ-113c)",
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/saga/status/FAILED"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"c3000000-0000-0000-0000-000000000098\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000098\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"status\": \"FAILED\",\n    \"currentStep\": 3,\n    \"failureReason\": \"Ledger debit failed: insufficient funds\",\n    \"startedAt\": \"2024-03-17T17:00:00Z\",\n    \"completedAt\": \"2024-03-17T17:00:04Z\",\n    \"steps\": [\n      { \"stepName\": \"COMPENSATION_CANCEL\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:03Z\" },\n      { \"stepName\": \"COMPENSATION_RELEASE\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:04Z\" }\n    ]\n  }\n]",
+              "description": "Change status path param to FAILED to see all compensated sagas. Each FAILED saga will include COMPENSATION_CANCEL and/or COMPENSATION_RELEASE SagaSteps once EQ-113c is complete."
+            },
+            {
+              "name": "200 OK — COMPENSATING sagas (stuck mid-compensation)",
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/saga/status/COMPENSATING"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"id\": \"c3000000-0000-0000-0000-000000000097\",\n    \"orderId\": \"b2000000-0000-0000-0000-000000000097\",\n    \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n    \"status\": \"COMPENSATING\",\n    \"currentStep\": 3,\n    \"failureReason\": \"Ledger debit failed: connection timeout\",\n    \"startedAt\": \"2024-03-17T16:50:00Z\",\n    \"completedAt\": null,\n    \"updatedAt\": \"2024-03-17T16:50:05Z\",\n    \"steps\": [\n      { \"stepName\": \"COMPENSATION_CANCEL\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T16:50:05Z\" }\n    ]\n  }\n]",
+              "description": "Sagas stuck in COMPENSATING — pod crashed mid-compensation or a Feign call failed. SagaRecoveryJob (EQ-113c) queries this endpoint every 60s and retries missing steps for sagas older than 2 minutes. In normal operation this list should be empty."
             }
           ]
         }
@@ -4711,6 +4772,934 @@
                 },
                 "description": "OPEN path — seed order TSLA LIMIT BUY is sitting in the order book at $250.00. Expected: 200, status=CANCELLED, Kafka event published.\n\nNote: the order_book_entries row for this order (seeded in V3) will be orphaned until EQ-113c wires the order-book removal step into compensation."
               }
+            }
+          ]
+        },
+        {
+          "name": "Flow G — EQ-113c Saga Compensation (end-to-end)",
+          "description": "Three subfolders — one per failedStep branch in OrderSaga.failSaga() switch.\n\nG-1 COMPLIANCE_CHECK (failedStep=1): fully automated via chaos NETWORK_LATENCY.\nG-2 ORDER_MATCHING   (failedStep=2): stop order-service before running to force triggerMatch() Feign failure.\nG-3 LEDGER_DEBIT     (failedStep=3): stop ledger-service before running to force debit() Feign failure.\n\nEach folder: login → before DB snapshot → order submit → failure trigger → after DB assertions.",
+          "item": [
+            {
+              "name": "G-1 · COMPLIANCE_CHECK (failedStep=1) — chaos-induced",
+              "description": "Maps to: switch case 1 in OrderSaga.failSaga(). Trigger: chaos NETWORK_LATENCY 30s causes complianceClient.check() to timeout. Expected compensation: none. saga=FAILED, currentStep=1, order=PENDING, ledger unchanged.",
+              "item": [
+                {
+                  "name": "G1.1 — [SETUP] Login trader1",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/auth/token",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "auth",
+                        "token"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"username\": \"trader1\",\n  \"password\": \"password123\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Login succeeded', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "if (j.token) pm.collectionVariables.set('trader1_token', j.token);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G1.2 — [BEFORE] Snapshot ledger (availableCash + cashOnHold)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/ledger/accounts/a1000000-0000-0000-0000-000000000001",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "ledger",
+                        "accounts",
+                        "a1000000-0000-0000-0000-000000000001"
+                      ]
+                    }
+                  },
+                  "description": "BEFORE state. Step-1 failure must not touch the ledger — no hold placed, no release called. Save both values for G1.8 comparison.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Ledger found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.collectionVariables.set('g1_before_available_cash', j.availableCash);",
+                          "pm.collectionVariables.set('g1_before_cash_on_hold', j.cashOnHold);",
+                          "console.log('[G1 BEFORE] availableCash=' + j.availableCash + ' cashOnHold=' + j.cashOnHold);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G1.3 — [TRIGGER] Inject chaos: NETWORK_LATENCY 30s",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/admin/chaos/start",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "admin",
+                        "chaos",
+                        "start"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 30000,\n  \"failureRatePercent\": 0,\n  \"triggeredBy\": \"postman-G1\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "30s latency exceeds Feign timeout. First Feign call is complianceClient.check() (step 1). It will timeout → executeStep records FAILED → failSaga(saga, reason, 1) called → switch case 1 → no compensation.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Chaos started', () => pm.response.to.have.status(200));",
+                          "console.log('[G1] Chaos ON — complianceClient.check() will timeout');"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G1.4 — [SUBMIT] Submit MARKET order (saga will fail at COMPLIANCE_CHECK)",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/orders",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "orders"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "Order submission succeeds (order-service is not behind chaos). The saga for this order will fail at step 1. Save as g1_order_id.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Order accepted', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "if (j.id) { pm.collectionVariables.set('g1_order_id', j.id); console.log('[G1] order_id=' + j.id); }"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G1.5 — [CLEANUP] Stop chaos (always run)",
+                  "request": {
+                    "method": "POST",
+                    "header": [],
+                    "url": {
+                      "raw": "{{base_url}}/admin/chaos/stop",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "admin",
+                        "chaos",
+                        "stop"
+                      ]
+                    }
+                  },
+                  "description": "Stop chaos immediately. Run this even if G1.4 fails — 30s latency left active will break all downstream requests in this and other flows.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Chaos stopped', () => pm.response.to.have.status(200));",
+                          "console.log('[G1] Chaos OFF');"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G1.6 — [AFTER] Saga: FAILED at step 1, zero COMPENSATION_* steps",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/saga/order/{{g1_order_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "saga",
+                        "order",
+                        "{{g1_order_id}}"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — saga DB row. switch case 1 is a no-op: compensateCancel() and compensateRelease() are never called, no COMPENSATION_* SagaStep rows are written.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Saga found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.test('saga.status = FAILED', () => pm.expect(j.status).to.eql('FAILED'));",
+                          "pm.test('saga.currentStep = 1 (COMPLIANCE_CHECK)', () => pm.expect(j.currentStep).to.eql(1));",
+                          "var comp = (j.steps || []).filter(s => s.stepName && s.stepName.startsWith('COMPENSATION_'));",
+                          "pm.test('zero COMPENSATION_* SagaStep rows (switch case 1 no-op)', () => pm.expect(comp.length).to.eql(0));",
+                          "console.log('[G1 AFTER saga] status=' + j.status + ' currentStep=' + j.currentStep + ' steps=' + j.steps.length);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G1.7 — [AFTER] Order: status=PENDING (system-cancel not called)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/orders/{{g1_order_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "orders",
+                        "{{g1_order_id}}"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — orders DB row. compensateCancel() was not called so order.status stays PENDING. The order was never matched.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Order found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.test('order.status = PENDING (compensateCancel not called)', () => pm.expect(j.status).to.eql('PENDING'));",
+                          "console.log('[G1 AFTER order] status=' + j.status);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G1.8 — [AFTER] Ledger: unchanged vs G1.2 snapshot",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/ledger/accounts/a1000000-0000-0000-0000-000000000001",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "ledger",
+                        "accounts",
+                        "a1000000-0000-0000-0000-000000000001"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — ledger_accounts DB row. No hold was placed (saga never reached ledger), no release ran. availableCash and cashOnHold must match the G1.2 snapshot exactly.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Ledger found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "var bc = pm.collectionVariables.get('g1_before_available_cash');",
+                          "var bh = pm.collectionVariables.get('g1_before_cash_on_hold');",
+                          "console.log('[G1 AFTER ledger] BEFORE availableCash=' + bc + ' cashOnHold=' + bh);",
+                          "console.log('[G1 AFTER ledger] AFTER  availableCash=' + j.availableCash + ' cashOnHold=' + j.cashOnHold);",
+                          "pm.test('availableCash unchanged', () => pm.expect(String(j.availableCash)).to.eql(String(bc)));",
+                          "pm.test('cashOnHold unchanged', () => pm.expect(String(j.cashOnHold)).to.eql(String(bh)));"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "G-2 · ORDER_MATCHING (failedStep=2) — stop order-service to trigger",
+              "description": "Maps to: switch case 2 in OrderSaga.failSaga(). Trigger: stop order-service so orderClient.triggerMatch() Feign call fails (connection refused). Expected compensation: compensateCancel() only. saga=FAILED, currentStep=2, order=CANCELLED, ledger hold unchanged (no release).\n\nSetup: docker compose stop order-service before running G2.4. Restart after: docker compose start order-service.",
+              "item": [
+                {
+                  "name": "G2.1 — [SETUP] Login trader1",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/auth/token",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "auth",
+                        "token"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"username\": \"trader1\",\n  \"password\": \"password123\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Login succeeded', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "if (j.token) pm.collectionVariables.set('trader1_token', j.token);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G2.2 — [BEFORE] Snapshot ledger (availableCash + cashOnHold)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/ledger/accounts/a1000000-0000-0000-0000-000000000001",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "ledger",
+                        "accounts",
+                        "a1000000-0000-0000-0000-000000000001"
+                      ]
+                    }
+                  },
+                  "description": "BEFORE state. Step-2 failure: compliance passed (hold may have been placed), but matching failed before debit. Release is NOT called — hold stays frozen until manually resolved. Save values for G2.7 comparison.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Ledger found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.collectionVariables.set('g2_before_available_cash', j.availableCash);",
+                          "pm.collectionVariables.set('g2_before_cash_on_hold', j.cashOnHold);",
+                          "console.log('[G2 BEFORE] availableCash=' + j.availableCash + ' cashOnHold=' + j.cashOnHold);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G2.3 — [TRIGGER] Stop order-service (run in terminal: docker compose stop order-service)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/saga/active",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "saga",
+                        "active"
+                      ]
+                    }
+                  },
+                  "description": "MANUAL STEP — run in terminal before G2.4:\n\n  docker compose stop order-service\n\nThis causes orderClient.triggerMatch() (step 2) to throw a connection-refused Feign exception. compliance-service (step 1) is still running so the saga passes step 1 and fails at step 2.\n\nThis request just confirms the gateway is still up. After running G2.4–G2.7, restart: docker compose start order-service",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Gateway still reachable', () => pm.response.to.have.status(200));",
+                          "console.log('[G2 TRIGGER] Confirm order-service is stopped before running G2.4');"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G2.4 — [SUBMIT] Submit MARKET order (saga will fail at ORDER_MATCHING)",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/orders",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "orders"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "Compliance (step 1) passes. triggerMatch() (step 2) fails with connection refused → failSaga(saga, reason, 2) → switch case 2 → compensateCancel() called. Save as g2_order_id.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Order accepted', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "if (j.id) { pm.collectionVariables.set('g2_order_id', j.id); console.log('[G2] order_id=' + j.id); }"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G2.5 — [AFTER] Saga: FAILED at step 2, COMPENSATION_CANCEL only",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/saga/order/{{g2_order_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "saga",
+                        "order",
+                        "{{g2_order_id}}"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — saga DB row. switch case 2: compensateCancel() called, compensateRelease() NOT called. Exactly one COMPENSATION_CANCEL SagaStep row, no COMPENSATION_RELEASE row.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Saga found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.test('saga.status = FAILED', () => pm.expect(j.status).to.eql('FAILED'));",
+                          "pm.test('saga.currentStep = 2 (ORDER_MATCHING)', () => pm.expect(j.currentStep).to.eql(2));",
+                          "var cancel = (j.steps || []).find(s => s.stepName === 'COMPENSATION_CANCEL');",
+                          "var release = (j.steps || []).find(s => s.stepName === 'COMPENSATION_RELEASE');",
+                          "pm.test('COMPENSATION_CANCEL SagaStep present', () => pm.expect(cancel).to.not.be.undefined);",
+                          "if (cancel) pm.test('COMPENSATION_CANCEL = COMPLETED', () => pm.expect(cancel.status).to.eql('COMPLETED'));",
+                          "pm.test('no COMPENSATION_RELEASE (hold not yet placed at step 2)', () => pm.expect(release).to.be.undefined);",
+                          "console.log('[G2 AFTER saga] status=' + j.status + ' currentStep=' + j.currentStep);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G2.6 — [AFTER] Order: status=CANCELLED (compensateCancel ran)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/orders/{{g2_order_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "orders",
+                        "{{g2_order_id}}"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — orders DB row. compensateCancel() called systemCancelOrder() successfully → order.status = CANCELLED.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Order found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.test('order.status = CANCELLED (compensateCancel succeeded)', () => pm.expect(j.status).to.eql('CANCELLED'));",
+                          "console.log('[G2 AFTER order] status=' + j.status);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G2.7 — [AFTER] Ledger: cashOnHold unchanged (compensateRelease not called)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/ledger/accounts/a1000000-0000-0000-0000-000000000001",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "ledger",
+                        "accounts",
+                        "a1000000-0000-0000-0000-000000000001"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — ledger_accounts DB row. switch case 2 only calls compensateCancel(), not compensateRelease(). The hold placed during compliance stays frozen. cashOnHold should be unchanged vs G2.2 snapshot.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Ledger found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "var bh = pm.collectionVariables.get('g2_before_cash_on_hold');",
+                          "console.log('[G2 AFTER ledger] BEFORE cashOnHold=' + bh);",
+                          "console.log('[G2 AFTER ledger] AFTER  cashOnHold=' + j.cashOnHold + ' availableCash=' + j.availableCash);",
+                          "pm.test('cashOnHold unchanged (compensateRelease not called)', () => pm.expect(String(j.cashOnHold)).to.eql(String(bh)));"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "G-3 · LEDGER_DEBIT (failedStep=3) — stop ledger-service to trigger",
+              "description": "Maps to: switch case 3 in OrderSaga.failSaga(). Trigger: stop ledger-service so ledgerClient.debit() Feign call fails. Steps 1 (compliance) and 2 (matching) complete normally. Expected compensation: compensateCancel() + compensateRelease() both called. saga=FAILED, currentStep=3, order=CANCELLED, ledger hold released (availableCash restored).\n\nSetup: docker compose stop ledger-service before running G3.4. Restart after: docker compose start ledger-service.",
+              "item": [
+                {
+                  "name": "G3.1 — [SETUP] Login trader1",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/auth/token",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "auth",
+                        "token"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"username\": \"trader1\",\n  \"password\": \"password123\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Login succeeded', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "if (j.token) pm.collectionVariables.set('trader1_token', j.token);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G3.2 — [BEFORE] Snapshot ledger (availableCash + cashOnHold)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/ledger/accounts/a1000000-0000-0000-0000-000000000001",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "ledger",
+                        "accounts",
+                        "a1000000-0000-0000-0000-000000000001"
+                      ]
+                    }
+                  },
+                  "description": "BEFORE state. Step-3 failure: debit failed after matching. compensateRelease() will restore the hold back to availableCash. Save values — G3.7 asserts availableCash is restored and cashOnHold is reduced.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Ledger found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.collectionVariables.set('g3_before_available_cash', j.availableCash);",
+                          "pm.collectionVariables.set('g3_before_cash_on_hold', j.cashOnHold);",
+                          "console.log('[G3 BEFORE] availableCash=' + j.availableCash + ' cashOnHold=' + j.cashOnHold);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G3.3 — [TRIGGER] Stop ledger-service (run in terminal: docker compose stop ledger-service)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/saga/active",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "saga",
+                        "active"
+                      ]
+                    }
+                  },
+                  "description": "MANUAL STEP — run in terminal before G3.4:\n\n  docker compose stop ledger-service\n\nSteps 1 (compliance) and 2 (matching) complete normally. Step 3 calls ledgerClient.debit() which fails with connection refused → failSaga(saga, reason, 3) → switch case 3 → compensateCancel() then compensateRelease() both run.\n\nNote: compensateRelease() also calls ledger-service. If ledger-service is still down it will record COMPENSATION_RELEASE=FAILED. Restart ledger-service first if you want both steps to show COMPLETED: docker compose start ledger-service",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Gateway reachable', () => pm.response.to.have.status(200));",
+                          "console.log('[G3 TRIGGER] Confirm ledger-service is stopped before running G3.4');"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G3.4 — [SUBMIT] Submit MARKET order (saga will fail at LEDGER_DEBIT)",
+                  "request": {
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                      },
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/orders",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "orders"
+                      ]
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 1\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "description": "Compliance (step 1) and matching (step 2) pass. debit() (step 3) fails with connection refused → failSaga(saga, reason, 3) → switch case 3 → compensateCancel() + compensateRelease() both called. Save as g3_order_id.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Order accepted', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "if (j.id) { pm.collectionVariables.set('g3_order_id', j.id); console.log('[G3] order_id=' + j.id); }"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G3.5 — [AFTER] Saga: FAILED at step 3, COMPENSATION_CANCEL + COMPENSATION_RELEASE",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/saga/order/{{g3_order_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "saga",
+                        "order",
+                        "{{g3_order_id}}"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — saga DB row. switch case 3: both compensateCancel() and compensateRelease() called. Two COMPENSATION_* SagaStep rows expected, both COMPLETED.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Saga found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.test('saga.status = FAILED', () => pm.expect(j.status).to.eql('FAILED'));",
+                          "pm.test('saga.currentStep = 3 (LEDGER_DEBIT)', () => pm.expect(j.currentStep).to.eql(3));",
+                          "var cancel = (j.steps || []).find(s => s.stepName === 'COMPENSATION_CANCEL');",
+                          "var release = (j.steps || []).find(s => s.stepName === 'COMPENSATION_RELEASE');",
+                          "pm.test('COMPENSATION_CANCEL present', () => pm.expect(cancel).to.not.be.undefined);",
+                          "if (cancel) pm.test('COMPENSATION_CANCEL = COMPLETED', () => pm.expect(cancel.status).to.eql('COMPLETED'));",
+                          "pm.test('COMPENSATION_RELEASE present', () => pm.expect(release).to.not.be.undefined);",
+                          "if (release) pm.test('COMPENSATION_RELEASE = COMPLETED', () => pm.expect(release.status).to.eql('COMPLETED'));",
+                          "console.log('[G3 AFTER saga] status=' + j.status + ' currentStep=' + j.currentStep + ' cancelStatus=' + (cancel ? cancel.status : 'MISSING') + ' releaseStatus=' + (release ? release.status : 'MISSING'));"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G3.6 — [AFTER] Order: status=CANCELLED (compensateCancel ran)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/orders/{{g3_order_id}}",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "orders",
+                        "{{g3_order_id}}"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — orders DB row. compensateCancel() called systemCancelOrder() → order.status = CANCELLED.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Order found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "pm.test('order.status = CANCELLED (compensateCancel succeeded)', () => pm.expect(j.status).to.eql('CANCELLED'));",
+                          "console.log('[G3 AFTER order] status=' + j.status);"
+                        ]
+                      }
+                    }
+                  ]
+                },
+                {
+                  "name": "G3.7 — [AFTER] Ledger: hold released (availableCash restored, cashOnHold reduced)",
+                  "request": {
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Authorization",
+                        "value": "Bearer {{trader1_token}}"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{base_url}}/ledger/accounts/a1000000-0000-0000-0000-000000000001",
+                      "host": [
+                        "{{base_url}}"
+                      ],
+                      "path": [
+                        "ledger",
+                        "accounts",
+                        "a1000000-0000-0000-0000-000000000001"
+                      ]
+                    }
+                  },
+                  "description": "AFTER state — ledger_accounts DB row. compensateRelease() called ledgerClient.release() → hold moved back to available. cashOnHold should be less than G3.2 snapshot. availableCash should be greater than G3.2 snapshot (hold was freed).",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "pm.test('Ledger found', () => pm.response.to.have.status(200));",
+                          "var j = pm.response.json();",
+                          "var bc = parseFloat(pm.collectionVariables.get('g3_before_available_cash'));",
+                          "var bh = parseFloat(pm.collectionVariables.get('g3_before_cash_on_hold'));",
+                          "console.log('[G3 AFTER ledger] BEFORE availableCash=' + bc + ' cashOnHold=' + bh);",
+                          "console.log('[G3 AFTER ledger] AFTER  availableCash=' + j.availableCash + ' cashOnHold=' + j.cashOnHold);",
+                          "pm.test('availableCash restored (hold released back to available)', () => pm.expect(parseFloat(j.availableCash)).to.be.at.least(bc));",
+                          "pm.test('cashOnHold reduced (hold removed)', () => pm.expect(parseFloat(j.cashOnHold)).to.be.at.most(bh));"
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
             }
           ]
         }
