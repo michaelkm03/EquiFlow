@@ -16,7 +16,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * OrderSaga: 5-step distributed saga for order processing.
@@ -70,13 +69,17 @@ public class OrderSaga {
         });
 
         if ("FAILED".equals(step1.getStatus())) {
-            return failSaga(saga, "Compliance check failed: " + step1.getErrorMessage());
+            // Compliance API error — nothing committed downstream; case 1 skips compensation
+            log.error("OrderSaga step1 compliance API error orderId={} userId={} reason={}",
+                    saga.getOrderId(), saga.getUserId(), step1.getErrorMessage());
+            return failSaga(saga, "Compliance check failed: " + step1.getErrorMessage(), 1);
         }
 
         // Verify compliance approved
         String compResult = step1.getResponsePayload();
         if (compResult != null && compResult.contains("\"approved\":false")) {
-            return failSaga(saga, "Order rejected by compliance check");
+            // Compliance business rejection — order not yet matched or debited; case 1 skips compensation
+            return failSaga(saga, "Order rejected by compliance check", 1);
         }
 
         // Step 2: Match order in order book — skip for STOP_LOSS (awaits price trigger)
@@ -94,8 +97,8 @@ public class OrderSaga {
         );
 
         if ("FAILED".equals(step2.getStatus())) {
-            // Compensate: nothing to undo for matching yet
-            return failSaga(saga, "Order matching failed: " + step2.getErrorMessage());
+            // Matching failed — order is PENDING/OPEN, not yet debited; case 2 cancels order only
+            return failSaga(saga, "Order matching failed: " + step2.getErrorMessage(), 2);
         }
 
         // Step 3: Debit ledger (extract fill details from match response)
@@ -129,7 +132,8 @@ public class OrderSaga {
         });
 
         if ("FAILED".equals(step3.getStatus())) {
-            return failSaga(saga, "Ledger debit failed: " + step3.getErrorMessage());
+            // Debit failed — order is FILLED, hold still frozen; case 3 cancels order and releases hold
+            return failSaga(saga, "Ledger debit failed: " + step3.getErrorMessage(), 3);
         }
 
         // Step 4: Create settlement record
@@ -196,14 +200,130 @@ public class OrderSaga {
         return step;
     }
 
-    private Saga failSaga(Saga saga, String reason) {
+    /**
+     * Re-runs compensation for a saga stuck in COMPENSATING (called by SagaRecoveryJob).
+     * Idempotency guards in each helper skip steps already COMPLETED.
+     */
+    @Transactional
+    public void rerunCompensation(Saga saga) {
+        int failedStep = saga.getCurrentStep();
+        log.info("saga_recovery start orderId={} userId={} failedStep={}", saga.getOrderId(), saga.getUserId(), failedStep);
+
+        switch (failedStep) {
+            case 1 -> {
+                // Nothing committed downstream at step 1 — no compensation needed
+                log.info("saga_recovery step=1 orderId={} userId={} — no compensation required", saga.getOrderId(), saga.getUserId());
+            }
+            case 2 -> compensateCancel(saga);
+            case 3 -> {
+                compensateCancel(saga);
+                compensateRelease(saga);
+            }
+            default -> log.warn("saga_recovery unrecognised failedStep={} orderId={} userId={}", failedStep, saga.getOrderId(), saga.getUserId());
+        }
+
+        saga.setStatus("FAILED");
+        saga.setFailureReason("Recovered by SagaRecoveryJob after stuck in COMPENSATING");
+        saga.setCompletedAt(Instant.now());
+        sagaRepository.save(saga);
+        log.info("saga_recovery complete orderId={} userId={} status=FAILED", saga.getOrderId(), saga.getUserId());
+    }
+
+    private Saga failSaga(Saga saga, String reason, int failedStep) {
+        // Write COMPENSATING before any Feign call — crash-safe checkpoint for SagaRecoveryJob
         saga.setStatus("COMPENSATING");
         saga = sagaRepository.save(saga);
+        log.info("saga_compensation checkpoint orderId={} userId={} failedStep={} status=COMPENSATING",
+                saga.getOrderId(), saga.getUserId(), failedStep);
+
+        // Each case isolates its Feign calls — a cancel failure must not block release from running
+        switch (failedStep) {
+            case 1 -> {
+                // Nothing committed downstream at step 1 — no compensation needed
+                log.info("saga_compensation step=1 orderId={} userId={} — no compensation required",
+                        saga.getOrderId(), saga.getUserId());
+            }
+            case 2 -> {
+                // Order is PENDING/OPEN — cancel it; nothing debited yet
+                compensateCancel(saga);
+            }
+            case 3 -> {
+                // Order is FILLED and hold is frozen — cancel order then release hold
+                compensateCancel(saga);
+                compensateRelease(saga);
+            }
+            default -> log.warn("saga_compensation unrecognised failedStep={} orderId={} userId={}",
+                    failedStep, saga.getOrderId(), saga.getUserId());
+        }
+
         saga.setStatus("FAILED");
         saga.setFailureReason(reason);
         saga.setCompletedAt(Instant.now());
         saga = sagaRepository.save(saga);
-        log.error("OrderSaga FAILED for orderId={}: {}", saga.getOrderId(), reason);
+        log.error("OrderSaga FAILED orderId={} userId={} reason={}", saga.getOrderId(), saga.getUserId(), reason);
         return saga;
+    }
+
+    private void compensateCancel(Saga saga) {
+        // Idempotency guard: skip if a COMPLETED COMPENSATION_CANCEL step already exists (e.g. recovery job re-run)
+        boolean alreadyDone = saga.getSteps().stream()
+                .anyMatch(s -> "COMPENSATION_CANCEL".equals(s.getStepName()) && "COMPLETED".equals(s.getStatus()));
+        if (alreadyDone) {
+            log.info("saga_compensation step=CANCEL orderId={} userId={} already COMPLETED — skipping",
+                    saga.getOrderId(), saga.getUserId());
+            return;
+        }
+
+        SagaStep step = new SagaStep();
+        step.setSaga(saga);
+        step.setStepNumber(0); // 0 = compensation step, not part of the main 1-5 sequence
+        step.setStepName("COMPENSATION_CANCEL");
+        step.setExecutedAt(Instant.now());
+        try {
+            Map<String, Object> body = new HashMap<>();
+            body.put("userId", saga.getUserId().toString());
+            orderClient.systemCancelOrder(saga.getOrderId(), body);
+            step.setStatus("COMPLETED");
+            log.info("saga_compensation step=CANCEL orderId={} userId={} outcome=COMPLETED",
+                    saga.getOrderId(), saga.getUserId());
+        } catch (Exception e) {
+            step.setStatus("FAILED");
+            step.setErrorMessage(e.getMessage());
+            log.error("saga_compensation step=CANCEL orderId={} userId={} outcome=FAILED reason={}",
+                    saga.getOrderId(), saga.getUserId(), e.getMessage());
+        }
+        saga.getSteps().add(step);
+    }
+
+    private void compensateRelease(Saga saga) {
+        // Idempotency guard: skip if a COMPLETED COMPENSATION_RELEASE step already exists (e.g. recovery job re-run)
+        boolean alreadyDone = saga.getSteps().stream()
+                .anyMatch(s -> "COMPENSATION_RELEASE".equals(s.getStepName()) && "COMPLETED".equals(s.getStatus()));
+        if (alreadyDone) {
+            log.info("saga_compensation step=RELEASE orderId={} userId={} already COMPLETED — skipping",
+                    saga.getOrderId(), saga.getUserId());
+            return;
+        }
+
+        SagaStep step = new SagaStep();
+        step.setSaga(saga);
+        step.setStepNumber(0); // 0 = compensation step, not part of the main 1-5 sequence
+        step.setStepName("COMPENSATION_RELEASE");
+        step.setExecutedAt(Instant.now());
+        try {
+            Map<String, Object> body = new HashMap<>();
+            body.put("userId", saga.getUserId().toString());
+            body.put("orderId", saga.getOrderId().toString());
+            ledgerClient.release(body);
+            step.setStatus("COMPLETED");
+            log.info("saga_compensation step=RELEASE orderId={} userId={} outcome=COMPLETED",
+                    saga.getOrderId(), saga.getUserId());
+        } catch (Exception e) {
+            step.setStatus("FAILED");
+            step.setErrorMessage(e.getMessage());
+            log.error("saga_compensation step=RELEASE orderId={} userId={} outcome=FAILED reason={}",
+                    saga.getOrderId(), saga.getUserId(), e.getMessage());
+        }
+        saga.getSteps().add(step);
     }
 }
