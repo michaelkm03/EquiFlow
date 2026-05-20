@@ -2,6 +2,7 @@ package com.equiflow.compliance.service;
 
 import com.equiflow.compliance.dto.ComplianceRequest;
 import com.equiflow.compliance.dto.ComplianceResult;
+import com.equiflow.compliance.dto.ComplianceResultResponse;
 import com.equiflow.compliance.dto.Violation;
 import com.equiflow.compliance.kafka.ComplianceEventPublisher;
 import com.equiflow.compliance.model.ComplianceCheck;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -105,6 +107,26 @@ public class ComplianceService {
         }
 
         return Optional.empty();
+    }
+
+    public ComplianceResultResponse getResultByOrderId(UUID orderId) {
+        ComplianceCheck check = checkRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
+                        "No compliance result found for order " + orderId));
+
+        List<Violation> violations;
+        try {
+            violations = objectMapper.readValue(check.getViolations(), new TypeReference<>() {});
+        } catch (Exception e) {
+            violations = List.of();
+        }
+
+        return ComplianceResultResponse.builder()
+                .orderId(check.getOrderId())
+                .result(check.getResult())
+                .violations(violations)
+                .checkedAt(check.getCheckedAt())
+                .build();
     }
 
     public List<ComplianceCheck> getHistoryForUser(String userId) {

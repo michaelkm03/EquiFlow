@@ -1,5 +1,6 @@
 package com.equiflow.compliance.config;
 
+import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,11 @@ public class GlobalExceptionHandler {
                 .map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .collect(Collectors.joining(", "));
         return errorResponse(HttpStatus.BAD_REQUEST, message, request.getDescription(false));
+    }
+
+    @ExceptionHandler(EntityNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(EntityNotFoundException ex, WebRequest request) {
+        return errorResponse(HttpStatus.NOT_FOUND, ex.getMessage(), request.getDescription(false));
     }
 
     @ExceptionHandler(Exception.class)
