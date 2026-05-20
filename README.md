@@ -284,6 +284,34 @@ mvn verify                          # generates allure-results
 allure serve target/allure-results  # opens visual dashboard
 ```
 
+### Agent Tests (Python)
+
+Requires Python 3.11+ and the `equiflow-mcp` dependencies. No Docker stack required for Tier 1 or Tier 2.
+
+```bash
+cd equiflow-mcp
+pip install -r requirements-test.txt
+
+# Run all tests (Tier 1 unit + Tier 2 behavioral)
+pytest tests/ -v
+
+# Run one tier at a time
+pytest tests/test_loop.py tests/test_handlers.py -v          # Tier 1 only
+pytest tests/test_compliance_agent_behavior.py -v            # Tier 2 only
+```
+
+**Tier 3 — golden file replay** (requires Docker stack running + `ANTHROPIC_API_KEY` set):
+
+```bash
+# Record once — hits real Anthropic API and saves the full conversation to a fixture file
+python equiflow-mcp/tests/record_golden.py "Show me today's compliance breaches"
+
+# Replay — no API call, fully deterministic; run before major prompt or model changes
+pytest equiflow-mcp/tests/test_compliance_agent_e2e.py -v
+```
+
+See [Agent Testing Architecture](#agent-testing-architecture) for details on what each tier covers and when to run it.
+
 ---
 
 ## Chaos Engineering
@@ -576,6 +604,59 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 ```
 
 Adding a new tool: write one handler function, add one line to `HANDLERS`. `call_tool` never changes.
+
+---
+
+### Agent Testing Architecture
+
+Agents have two failure modes standard unit tests don't catch: loop failures (wrong message order, missed stop reason, infinite loop) and behavioral failures (agent calls the wrong tool, skips a required output section, follows the wrong decision branch). The test suite uses three tiers to cover both.
+
+**Testing pyramid — where each tier sits:**
+
+```
+        ▲
+       /T3\        End-to-end / Golden   ~5%    real model, real data, run manually
+      /----\
+     / T2   \      Behavioral             ~20%   mock LLM + HTTP, run on every PR
+    /--------\
+   /    T1    \    Unit                   ~75%   mock everything, run on every commit
+  /____________\
+```
+
+| | Tier 1 — Unit | Tier 2 — Behavioral | Tier 3 — Golden |
+|---|---|---|---|
+| **Traditional equivalent** | `OrderServiceTest` — one class, mocked deps | `@WebMvcTest` — slice wired, external I/O mocked | Testcontainers — real Postgres + Kafka |
+| **What's mocked** | Anthropic API, httpx, everything | Anthropic API + HTTP to services | Nothing — golden file replays saved model responses |
+| **What runs real** | Loop logic, handler URL building | Loop code, dispatch, handler logic | Loop, dispatch, handlers, real services, real DB |
+| **LLM called?** | No | No | No (golden file replay) |
+| **Speed** | <1 ms | <100 ms | 10–30 s |
+| **Cost** | Free | Free | API credits on record; free on replay |
+| **Runs in CI?** | Yes | Yes | No |
+| **When to run** | Every commit | Every PR | Before prompt changes, model upgrades |
+| **What it catches** | Loop bugs, bad URL construction, error handling | Wrong tool sequence, missing output sections, bad branching | Real model regressions, stale tool return shapes |
+
+**Key assertion rule (Tier 2 + 3):** assert facts, not exact strings. The model rephrases between runs — `assert "3" in answer` survives a model upgrade; `assert answer == "3 breaches detected"` does not.
+
+```python
+assert "3" in answer                 # breach count present
+assert "WASH_SALE" in answer         # violation type named
+assert "repeat" in answer.lower()    # repeat offender concept present
+```
+
+**Files:**
+
+```
+equiflow-mcp/
+  tests/
+    __init__.py
+    fixtures/                          # JSON test data + golden conversation files
+    test_loop.py                       # Tier 1 — loop mechanics
+    test_handlers.py                   # Tier 1 — tool handler URL/error logic
+    test_compliance_agent_behavior.py  # Tier 2 — compliance agent behavioral tests
+    record_golden.py                   # Tier 3 — record a real conversation to fixture
+    test_compliance_agent_e2e.py       # Tier 3 — replay golden fixture, assert facts
+  requirements-test.txt
+```
 
 ---
 

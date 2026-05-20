@@ -111,6 +111,7 @@ public class ComplianceService {
     }
 
     public ComplianceResultResponse getResultByOrderId(UUID orderId) {
+        log.info("Fetching compliance result for order {}", orderId);
         ComplianceCheck check = checkRepository.findByOrderId(orderId)
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
                         "No compliance result found for order " + orderId));
