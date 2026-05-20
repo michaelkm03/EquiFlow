@@ -408,70 +408,78 @@ Open Docker Desktop → Settings → Resources → increase Memory to at least *
 
 ---
 
-## AI Agent
+## AI Agents
 
-EquiFlow includes an order triage agent built on [MCP (Model Context Protocol)](https://modelcontextprotocol.io) — the standard protocol (adopted by Anthropic, Google, OpenAI, and Microsoft) for connecting AI agents to external tools and data. The agent runs inside Claude Code and connects directly to EquiFlow's live services to investigate stuck or failed orders.
+EquiFlow includes AI agents built on [MCP (Model Context Protocol)](https://modelcontextprotocol.io) and the Claude API. Agents connect directly to EquiFlow's live services and reason over real data to diagnose problems, summarise breaches, and surface issues that would otherwise require manual investigation.
 
-### How it works
+All agents share a common reusable loop (`loop.py`) and a set of tool handlers (`equiflow_data_server.py`). Each agent file defines only what is specific to it: a system prompt, a tool list, and a dispatch table.
 
-When an order gets stuck, the agent runs a read-only triage flow across three services — deciding what to look at based on what each step returns:
+---
 
-1. `get_order` — reads order status, type, and saga ID
-2. `get_saga` — traces which saga step failed and why
-3. `query_audit_log` — checks retry count and last attempt timestamp
+### Architecture
 
-It returns a plain-language diagnosis: which service failed, what error, and what to do next.
+```
+loop.py                    # run_agent() — the reusable agent loop, shared by all agents
+equiflow_data_server.py    # tool handlers + MCP server (Claude Code integration)
+agent.py                   # Order triage agent        (on-demand CLI)
+compliance_agent.py        # Compliance breach agent   (on-demand CLI)
+```
+
+**Adding a new agent:** create a new `*_agent.py` file. Import `run_agent` from `loop.py`, define `SYSTEM_TEMPLATE`, `TOOLS`, `DISPATCH`, `call_tool`, and `main`. The loop never changes.
+
+---
 
 ### Tools
 
-| Tool | Endpoint | Returns |
-|---|---|---|
-| `get_order` | `GET /orders/{id}` | Order status, saga ID, timestamps |
-| `get_saga` | `GET /sagas/{id}` | Step trace, failure reason, current state |
-| `query_audit_log` | `GET /audit/events/order/{orderId}` | Retry history, last attempt time |
+| Tool | Endpoint | Returns | Used by |
+|---|---|---|---|
+| `get_order` | `GET /orders/{id}` | Order status, saga ID, timestamps | triage, compliance |
+| `get_saga` | `GET /sagas/{id}` | Step trace, failure reason, state | triage |
+| `query_audit_log` | `GET /audit/events/order/{id}` | Retry history, last attempt time | triage |
+| `list_orders` | `GET /orders` | Paginated, filterable order list | triage, compliance |
+| `get_compliance_result` | `GET /compliance/results/order/{id}` | Violation type, reason, timestamp | compliance |
 
-Auth is handled automatically — the server logs in as `bot-operator1` on first use.
+Auth is handled automatically — the server logs in as `bot-operator1` on first use and refreshes the token on expiry.
 
 ---
 
 ### Setup
 
-**Prerequisites:** Claude Code, Python 3.11+, and the full stack running (`docker-compose up`).
+**Prerequisites:** Python 3.11+, `ANTHROPIC_API_KEY` set in your environment, and the full stack running (`docker-compose up`).
 
-**1. Install dependencies**
+**Install dependencies**
 
 ```bash
 cd equiflow-mcp
 pip install -r requirements.txt
 ```
 
-**2. Register the server with Claude Code**
+**Set your API key**
 
-The server is pre-configured in [.mcp.json](.mcp.json) and approved in [.claude/settings.json](.claude/settings.json). No additional config needed — Claude Code detects it automatically when you open the project.
-
-**3. Verify the connection**
-
-Open Claude Code in the project root and run:
-
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...   # Mac/Linux
+$env:ANTHROPIC_API_KEY="sk-ant-..."   # Windows PowerShell
 ```
-/mcp
-```
-
-You should see `equiflow-data` listed as connected with three tools: `get_order`, `get_saga`, `query_audit_log`.
 
 ---
 
-### Example Usage
+### Agent 1 — Order Triage (on-demand)
 
-With the stack running, open Claude Code in the project root and ask:
+Investigates a stuck or failed order and explains what went wrong in plain English.
 
-> "Order `{uuid}` has been stuck for 20 minutes. What's wrong?"
+```bash
+python equiflow-mcp/agent.py "Order abc-123 has been stuck for 20 minutes. What's wrong?"
+```
 
-The agent calls the three tools in sequence and returns something like:
+**What it does:**
+1. `get_order` — confirms status, retrieves saga ID
+2. `get_saga` — identifies which step failed and the failure reason
+3. `query_audit_log` — checks retry count and last attempt time
 
-> Order is in `PENDING_SETTLEMENT` state. Saga step 3 (settlement-service) failed with `INSUFFICIENT_FUNDS` at 14:23. The audit log shows 3 retry attempts — the last one was 18 minutes ago with no further attempts since. Recommend: check the ledger balance for the account and manually trigger a retry or escalate.
+**Example output:**
+> Saga step 3 (settlement-service) failed with `INSUFFICIENT_FUNDS` at 14:23. The audit log shows 3 retry attempts — the last was 18 minutes ago with no further attempts. Recommend: verify the account balance has been funded, then manually trigger a settlement retry via `POST /admin/settlement/run`, or escalate to compliance if a wash-sale is involved.
 
-To get a real order UUID, place an order first:
+To get a real order UUID:
 
 ```bash
 TOKEN=$(curl -s -X POST http://localhost:8080/auth/token \
@@ -484,45 +492,68 @@ curl -X POST http://localhost:8080/orders \
   -d '{"ticker":"AAPL","side":"BUY","type":"MARKET","quantity":10}'
 ```
 
-Then paste the returned `orderId` into your Claude Code prompt.
+---
+
+### Agent 2 — Compliance Breach Summary (on-demand)
+
+Summarises all compliance breaches for a given time period — breach count, violation breakdown, and repeat offenders — so a compliance officer can review them in one read.
+
+```bash
+python equiflow-mcp/compliance_agent.py "Show me today's compliance breaches"
+python equiflow-mcp/compliance_agent.py "Which accounts have repeated wash-sale violations this week?"
+```
+
+**What it does:**
+1. `list_orders(status=REJECTED, from=..., to=...)` — finds all rejected orders for the period
+2. `get_compliance_result(order_id)` — retrieves violation type and reason for each
+3. Groups by violation type, identifies repeat offenders, and summarises
+
+**Example output:**
+> 4 compliance breaches today. INSUFFICIENT_FUNDS: 3 (accounts trader1, trader2, trader3). WASH_SALE: 1 (account trader2 — repeat offender, 2 violations this week). Most recent: trader1 at 14:45, AAPL BUY rejected for insufficient funds ($2,400 short).
 
 ---
 
-### Inspecting the agent's capabilities
+### Claude Code integration (MCP)
 
-**Quick check — tool names only**
+The MCP server (`equiflow_data_server.py`) exposes all tools to Claude Code so you can run triage queries directly in the chat without leaving your editor.
 
-Run inside Claude Code:
+**1. Register the server**
+
+The server is pre-configured in [.mcp.json](.mcp.json) and approved in [.claude/settings.json](.claude/settings.json). Claude Code detects it automatically when you open the project.
+
+**2. Verify the connection**
 
 ```
 /mcp
 ```
 
-Shows all connected MCP servers and their registered tool names.
+You should see `equiflow-data` listed with all 5 tools.
 
-**Full schema — descriptions, inputs, and required fields**
+**3. Inspect the full schema**
 
 ```bash
 npx @modelcontextprotocol/inspector python equiflow-mcp/equiflow_data_server.py
 ```
 
-Opens a browser UI with every tool's full description and input schema. Use this to audit exactly what the agent knows how to do and what arguments each tool requires.
-
-**How the agent decides what to do**
-
-There is no hardcoded question map. The tool descriptions in `equiflow_data_server.py` are what the agent reads at runtime to decide which tool to call and when. Each description encodes three things:
-
-- What the tool returns
-- When to use it (`"Use this first"`, `"Use after get_order"`)
-- Why (`"to identify which step failed and why"`)
-
-To change what the agent is capable of or how it sequences its calls, edit the descriptions in `list_tools()`.
+Opens a browser UI with every tool's description and input schema — exactly what the agent sees at runtime.
 
 ---
 
-**Handler structure**
+### How agents decide what to do
 
-Each tool has its own handler function. `call_tool` only routes — it holds no business logic:
+There is no hardcoded routing. Tool descriptions are what the agent reads at runtime to decide which tool to call and when. Each description encodes:
+
+- **What it returns** — so the agent knows what data to expect
+- **When to call it** — routing hints (`"Use this first"`, `"Use after list_orders"`)
+- **Only for which inputs** — constraints that prevent wrong calls (`"Only call for REJECTED orders"`)
+
+To change agent behaviour, edit the descriptions. To add a new tool, add a handler function, register it in `HANDLERS`, and add it to the relevant agent's `TOOLS` list.
+
+---
+
+### Handler structure
+
+Each tool has its own handler. `call_tool` only routes:
 
 ```python
 async def handle_get_order(args: dict) -> list[TextContent]:
@@ -532,9 +563,8 @@ async def handle_get_order(args: dict) -> list[TextContent]:
     return [TextContent(type="text", text=r.text)]
 
 HANDLERS = {
-    "get_order":       handle_get_order,
-    "get_saga":        handle_get_saga,
-    "query_audit_log": handle_query_audit_log,
+    "get_order": handle_get_order,
+    ...
 }
 
 @server.call_tool()
@@ -545,7 +575,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     return await handler(arguments)
 ```
 
-Each handler owns its own error handling. Adding a new tool means writing one new function and adding one line to `HANDLERS` — `call_tool` never changes.
+Adding a new tool: write one handler function, add one line to `HANDLERS`. `call_tool` never changes.
 
 ---
 

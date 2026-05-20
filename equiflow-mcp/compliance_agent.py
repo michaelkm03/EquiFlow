@@ -6,8 +6,7 @@ from loop import run_agent
 from equiflow_data_server import (
     handle_get_order,
     handle_list_orders,
-    handle_get_saga,
-    handle_query_audit_log,
+    handle_get_compliance_result,
 )
 
 # ---------------------------------------------------------------------------
@@ -15,43 +14,34 @@ from equiflow_data_server import (
 # ---------------------------------------------------------------------------
 
 SYSTEM_TEMPLATE = """
-You are an EquiFlow order triage agent. Today's date is {today}.
+You are an EquiFlow compliance monitoring agent. Today's date is {today}.
 
-Your goal: given a stuck or failed order, identify the root cause and explain
-it in plain English so an on-call engineer can act immediately.
+Your goal: summarise all compliance breaches for the requested time period
+so a compliance officer can review them in one read.
 
-Your final response must state:
-- Which service failed
-- The failure reason (exact string from the data)
-- How many retries have occurred
-- A concrete recommendation: retry, escalate, or investigate further
+Steps:
+1. Call list_orders with status=REJECTED and an appropriate date range based on the question.
+2. For each rejected order, call get_compliance_result to retrieve the violation type and reason.
+3. Summarise the findings.
 
-Do not speculate beyond what the tools return. If data is missing, say so.
+Your final response must include:
+- Total breach count
+- Breakdown by violation type (WASH_SALE vs INSUFFICIENT_FUNDS)
+- Which accounts appear more than once (repeat offenders)
+- The most recent breach per account
+
+Do not include order IDs unless the user asks for them.
+Do not speculate on why a breach occurred beyond what the data shows.
+If there are no breaches for the period, say so clearly.
 """
 
 TOOLS = [
     {
-        "name": "get_order",
-        "description": (
-            "Get a single EquiFlow order by UUID. "
-            "Returns current status, order type, ticker, quantity, saga ID, and timestamps. "
-            "Use this first when investigating a stuck or failed order."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "order_id": {"type": "string", "description": "UUID of the order to retrieve"}
-            },
-            "required": ["order_id"],
-        },
-    },
-    {
         "name": "list_orders",
         "description": (
             "List orders from the EquiFlow database with optional filtering. "
-            "Supports filtering by status, ticker symbol, and date range. "
             "Returns paginated results sorted by createdAt descending. "
-            "Use this to find a real order_id before calling get_order or query_audit_log."
+            "Use this first to find all REJECTED orders for the requested time period."
         ),
         "input_schema": {
             "type": "object",
@@ -75,31 +65,32 @@ TOOLS = [
         },
     },
     {
-        "name": "get_saga",
+        "name": "get_order",
         "description": (
-            "Get the saga execution trace for a distributed transaction by saga UUID. "
-            "Returns each saga step with its status, failure reason, and retry count. "
-            "Use after get_order to identify which step in the transaction failed and why."
+            "Get a single EquiFlow order by UUID. "
+            "Returns current status, order type, ticker, quantity, and user ID. "
+            "Use this to retrieve the userId for a rejected order before calling get_compliance_result."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "saga_id": {"type": "string", "description": "UUID of the saga to retrieve"}
+                "order_id": {"type": "string", "description": "UUID of the order to retrieve"}
             },
-            "required": ["saga_id"],
+            "required": ["order_id"],
         },
     },
     {
-        "name": "query_audit_log",
+        "name": "get_compliance_result",
         "description": (
-            "Get the full append-only audit trail for a specific order by UUID. "
-            "Returns every state transition, retry attempt, and timestamp in chronological order. "
-            "Use after get_saga to determine how many retries occurred and when the last attempt happened."
+            "Get the compliance check result for a specific order by UUID. "
+            "Returns the overall result (APPROVED or REJECTED), all violations with their type and reason, and the check timestamp. "
+            "Use after list_orders for each REJECTED order to retrieve the specific violation type and failure reason. "
+            "Only call for REJECTED orders — approved orders have no meaningful violations."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
-                "order_id": {"type": "string", "description": "UUID of the order to retrieve audit events for"}
+                "order_id": {"type": "string", "description": "UUID of the order to retrieve the compliance result for"}
             },
             "required": ["order_id"],
         },
@@ -107,10 +98,9 @@ TOOLS = [
 ]
 
 DISPATCH = {
-    "get_order":       handle_get_order,
-    "list_orders":     handle_list_orders,
-    "get_saga":        handle_get_saga,
-    "query_audit_log": handle_query_audit_log,
+    "list_orders":            handle_list_orders,
+    "get_order":              handle_get_order,
+    "get_compliance_result":  handle_get_compliance_result,
 }
 
 
