@@ -182,7 +182,7 @@ async def handle_get_order(args: dict) -> list[TextContent]:
 async def handle_list_orders(args: dict) -> list[TextContent]:
     params = {k: v for k, v in args.items() if v is not None}
     query = "&".join(f"{k}={v}" for k, v in params.items())
-    return await _ok(await authed_get(f"/orders{'?' + query if query else ''}"))
+    return await _ok(await authed_get(f"/orders/internal/all{'?' + query if query else ''}"))
 
 
 async def handle_get_saga(args: dict) -> list[TextContent]:

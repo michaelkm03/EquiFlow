@@ -4,7 +4,6 @@ from datetime import date
 
 from loop import run_agent
 from equiflow_data_server import (
-    handle_get_order,
     handle_list_orders,
     handle_get_compliance_result,
 )
@@ -65,21 +64,6 @@ TOOLS = [
         },
     },
     {
-        "name": "get_order",
-        "description": (
-            "Get a single EquiFlow order by UUID. "
-            "Returns current status, order type, ticker, quantity, and user ID. "
-            "Use this to retrieve the userId for a rejected order before calling get_compliance_result."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "order_id": {"type": "string", "description": "UUID of the order to retrieve"}
-            },
-            "required": ["order_id"],
-        },
-    },
-    {
         "name": "get_compliance_result",
         "description": (
             "Get the compliance check result for a specific order by UUID. "
@@ -98,9 +82,8 @@ TOOLS = [
 ]
 
 DISPATCH = {
-    "list_orders":            handle_list_orders,
-    "get_order":              handle_get_order,
-    "get_compliance_result":  handle_get_compliance_result,
+    "list_orders":           handle_list_orders,
+    "get_compliance_result": handle_get_compliance_result,
 }
 
 

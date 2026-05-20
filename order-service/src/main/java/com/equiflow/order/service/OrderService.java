@@ -97,7 +97,9 @@ public class OrderService {
     }
 
     public Page<OrderResponse> listOrders(LocalDate from, LocalDate to, String status, String ticker, UUID userId, Pageable pageable) {
-        Specification<Order> spec = Specification.where((root, query, cb) -> cb.equal(root.get("userId"), userId));
+        Specification<Order> spec = userId != null
+                ? Specification.where((root, query, cb) -> cb.equal(root.get("userId"), userId))
+                : Specification.where(null);
 
         if (from != null) {
             Instant fromInstant = from.atStartOfDay(ZoneOffset.UTC).toInstant();

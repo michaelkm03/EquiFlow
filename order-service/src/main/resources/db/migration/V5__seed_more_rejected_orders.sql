@@ -1,0 +1,81 @@
+-- Expanded seed data for compliance agent testing
+--
+-- Adds 10 rejected + 2 approved orders across both traders.
+-- Combined with V4 this gives: 12 rejected, 3 approved (15 total seeded orders).
+--
+-- trader1 = a1000000-0000-0000-0000-000000000001
+-- trader2 = a1000000-0000-0000-0000-000000000004
+
+INSERT INTO orders (id, user_id, ticker, side, type, quantity, limit_price, trigger_price, filled_price, filled_qty, status, created_at, updated_at) VALUES
+
+    -- trader1 GOOGL: INSUFFICIENT_FUNDS
+    ('b1000000-0000-0000-0000-000000000014',
+     'a1000000-0000-0000-0000-000000000001',
+     'GOOGL', 'BUY', 'MARKET', 2000, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '5 hours', NOW() - INTERVAL '5 hours'),
+
+    -- trader2 NFLX: INSUFFICIENT_FUNDS
+    ('b1000000-0000-0000-0000-000000000015',
+     'a1000000-0000-0000-0000-000000000004',
+     'NFLX', 'BUY', 'MARKET', 500, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '6 hours', NOW() - INTERVAL '6 hours'),
+
+    -- trader1 TSLA: WASH_SALE
+    ('b1000000-0000-0000-0000-000000000016',
+     'a1000000-0000-0000-0000-000000000001',
+     'TSLA', 'BUY', 'MARKET', 100, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '7 hours', NOW() - INTERVAL '7 hours'),
+
+    -- trader2 AAPL: WASH_SALE
+    ('b1000000-0000-0000-0000-000000000017',
+     'a1000000-0000-0000-0000-000000000004',
+     'AAPL', 'BUY', 'MARKET', 200, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '8 hours', NOW() - INTERVAL '8 hours'),
+
+    -- trader1 AMD: INSUFFICIENT_FUNDS
+    ('b1000000-0000-0000-0000-000000000018',
+     'a1000000-0000-0000-0000-000000000001',
+     'AMD', 'BUY', 'MARKET', 3000, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '9 hours', NOW() - INTERVAL '9 hours'),
+
+    -- trader2 NVDA: INSUFFICIENT_FUNDS
+    ('b1000000-0000-0000-0000-000000000019',
+     'a1000000-0000-0000-0000-000000000004',
+     'NVDA', 'BUY', 'MARKET', 1500, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '10 hours', NOW() - INTERVAL '10 hours'),
+
+    -- trader1 AMZN: WASH_SALE
+    ('b1000000-0000-0000-0000-000000000020',
+     'a1000000-0000-0000-0000-000000000001',
+     'AMZN', 'BUY', 'MARKET', 75, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '11 hours', NOW() - INTERVAL '11 hours'),
+
+    -- trader2 GOOG: WASH_SALE
+    ('b1000000-0000-0000-0000-000000000021',
+     'a1000000-0000-0000-0000-000000000004',
+     'GOOG', 'BUY', 'MARKET', 300, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '12 hours', NOW() - INTERVAL '12 hours'),
+
+    -- trader1 META: INSUFFICIENT_FUNDS
+    ('b1000000-0000-0000-0000-000000000022',
+     'a1000000-0000-0000-0000-000000000001',
+     'META', 'BUY', 'MARKET', 1000, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '13 hours', NOW() - INTERVAL '13 hours'),
+
+    -- trader2 META: INSUFFICIENT_FUNDS
+    ('b1000000-0000-0000-0000-000000000023',
+     'a1000000-0000-0000-0000-000000000004',
+     'META', 'BUY', 'MARKET', 750, NULL, NULL, NULL, NULL,
+     'REJECTED', NOW() - INTERVAL '14 hours', NOW() - INTERVAL '14 hours'),
+
+    -- trader1 INTC: APPROVED (control)
+    ('b1000000-0000-0000-0000-000000000024',
+     'a1000000-0000-0000-0000-000000000001',
+     'INTC', 'BUY', 'MARKET', 500, NULL, NULL, 32.75, 500,
+     'FILLED', NOW() - INTERVAL '15 hours', NOW() - INTERVAL '15 hours'),
+
+    -- trader2 MSFT: APPROVED (control)
+    ('b1000000-0000-0000-0000-000000000025',
+     'a1000000-0000-0000-0000-000000000004',
+     'MSFT', 'BUY', 'MARKET', 50, NULL, NULL, 415.20, 50,
+     'FILLED', NOW() - INTERVAL '16 hours', NOW() - INTERVAL '16 hours');
