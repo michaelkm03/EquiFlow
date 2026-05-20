@@ -147,6 +147,25 @@ async def list_tools() -> list[Tool]:
                 "required": ["order_id"],
             },
         ),
+        Tool(
+            name="get_compliance_result",
+            description=(
+                "Get the compliance check result for a specific order by UUID. "
+                "Returns the overall result (APPROVED or REJECTED), all violations with their type and reason, and the check timestamp. "
+                "Use after list_orders to retrieve the specific violation type and failure reason for a REJECTED order. "
+                "Do not call for orders with status other than REJECTED — only rejected orders have meaningful violations."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "order_id": {
+                        "type": "string",
+                        "description": "UUID of the order to retrieve the compliance result for",
+                    }
+                },
+                "required": ["order_id"],
+            },
+        ),
     ]
 
 
@@ -174,11 +193,16 @@ async def handle_query_audit_log(args: dict) -> list[TextContent]:
     return await _ok(await authed_get(f"/audit/events/order/{args['order_id']}"))
 
 
+async def handle_get_compliance_result(args: dict) -> list[TextContent]:
+    return await _ok(await authed_get(f"/compliance/results/order/{args['order_id']}"))
+
+
 HANDLERS = {
-    "get_order":       handle_get_order,
-    "list_orders":     handle_list_orders,
-    "get_saga":        handle_get_saga,
-    "query_audit_log": handle_query_audit_log,
+    "get_order":               handle_get_order,
+    "list_orders":             handle_list_orders,
+    "get_saga":                handle_get_saga,
+    "query_audit_log":         handle_query_audit_log,
+    "get_compliance_result":   handle_get_compliance_result,
 }
 
 
