@@ -1142,6 +1142,237 @@ mvn verify -pl ledger-service
 
 ---
 
+## Backlog — AI Agents
+
+Three agents, one per invocation pattern. Each builds on the existing `run_agent()` loop in `equiflow-mcp/agent.py` and the handler registry in `equiflow_data_server.py`. The loop itself does not change — only the system prompt, tools, and trigger wiring differ.
+
+---
+
+### EQ-130 · On-Demand: Compliance Breach Summary Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 3 | P1 |
+
+**Invocation pattern:** On-demand — a human runs it from the CLI.
+
+**Problem it solves:** Compliance officers today manually query rejected orders, cross-reference the compliance check results for each, and group by failure type. This takes 15–30 minutes each morning. This agent does it in one command.
+
+**Example usage:**
+```bash
+python equiflow-mcp/compliance_agent.py "Show me today's compliance breaches"
+python equiflow-mcp/compliance_agent.py "Which accounts have repeated wash-sale violations this week?"
+```
+
+**Tools required:**
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| `list_orders` | Existing | Filter by `status=REJECTED` and date range |
+| `get_order` | Existing | Retrieve saga ID per rejected order |
+| `get_compliance_result` | **New** | `GET /compliance/results/order/{orderId}` — returns failure reason, violation type, check timestamp |
+
+**New endpoint needed:**
+
+`GET /compliance/results/order/{orderId}` on `compliance-service`
+- Returns: `{ orderId, violationType: "WASH_SALE" | "INSUFFICIENT_FUNDS", failureReason, checkedAt }`
+- Auth: BOT_OPERATOR role
+
+**System prompt:**
+```
+You are an EquiFlow compliance monitoring agent.
+
+Your goal: summarise all compliance breaches for the requested time period
+so a compliance officer can review them in one read.
+
+Your final response must include:
+- Total breach count
+- Breakdown by violation type (WASH_SALE vs INSUFFICIENT_FUNDS)
+- Which accounts appear more than once (repeat offenders)
+- The most recent breach per account
+
+Do not include order IDs unless the user asks for them.
+Do not speculate on why a breach occurred beyond what the data shows.
+```
+
+**Branching logic:**
+```
+list_orders(status=REJECTED, from=today)
+  → for each order: get_compliance_result(order_id)
+    → group by violationType
+    → identify repeat accounts
+  → summarise
+```
+
+**File to create:** `equiflow-mcp/compliance_agent.py`
+
+---
+
+### EQ-131 · Scheduled: EOD Settlement Reconciliation Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 5 | P1 |
+
+**Invocation pattern:** Scheduled — runs automatically at 4:05 PM ET every trading day after the settlement scheduler has run.
+
+**Problem it solves:** After market close, settlement-service marks filled orders as SETTLED. Any that remain PENDING_SETTLEMENT after the scheduler runs represent failures. Today no one knows about them until a trader complains. This agent surfaces them proactively.
+
+**Trigger wiring:**
+```bash
+# cron entry (crontab or Windows Task Scheduler)
+# runs at 4:05 PM ET Mon–Fri
+5 16 * * 1-5 python /path/to/equiflow-mcp/settlement_agent.py
+```
+
+**Tools required:**
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| `list_orders` | Existing | Filter by `status=FILLED`, `from=today` |
+| `get_order` | Existing | Retrieve settlement status and saga ID |
+| `query_audit_log` | Existing | Check retry history for stuck settlements |
+| `get_ledger_account` | **New** | `GET /ledger/accounts/{userId}` — verify cash balance for accounts with pending settlements |
+| `list_settlements` | **New** | `GET /settlement/records?orderId={orderId}` — returns settlement record status and date |
+
+**New endpoints needed:**
+
+`GET /settlement/records?orderId={orderId}` on `settlement-service`
+- Returns: `{ orderId, status: "PENDING_SETTLEMENT" | "SETTLED", settlementDate, settledAt }`
+- Auth: BOT_OPERATOR role
+
+`GET /ledger/accounts/{userId}` already exists — confirm it's accessible to BOT_OPERATOR.
+
+**System prompt:**
+```
+You are an EquiFlow end-of-day settlement reconciliation agent.
+
+Today's market has closed. Your goal: identify any filled orders from today
+that have not yet settled and assess whether intervention is needed.
+
+For each unsettled order:
+1. Check its settlement record status
+2. Check the audit log for retry history
+3. Check the account's ledger balance
+
+Your final response must state:
+- How many orders settled successfully today
+- How many remain PENDING_SETTLEMENT (if any)
+- For each stuck order: order ID, failure reason, retry count, account balance
+- Recommended action: auto-retry eligible, needs manual credit, or escalate to ops
+
+If all orders settled cleanly, say so clearly.
+```
+
+**Branching logic:**
+```
+list_orders(status=FILLED, from=today)
+  → for each: list_settlements(order_id)
+    → if SETTLED → count as success
+    → if PENDING_SETTLEMENT:
+        query_audit_log(order_id)  → retry count, last attempt
+        get_ledger_account(user_id) → current balance
+        → classify: retriable | needs manual credit | escalate
+  → summarise
+```
+
+**File to create:** `equiflow-mcp/settlement_agent.py`
+
+---
+
+### EQ-132 · Triggered: Order Failure Escalation Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 5 | P1 |
+
+**Invocation pattern:** Triggered — fires automatically when an order reaches `FAILED` or `COMPENSATION_REQUIRED` status via a Kafka event.
+
+**Problem it solves:** When a saga fails, ops today receives a Kafka event with an order ID and nothing else. They then manually trace through the saga, audit log, and ledger to understand what happened and decide whether to retry, credit the account, or escalate. This agent does that trace automatically and emits a structured decision.
+
+**Trigger wiring:**
+```python
+# kafka_consumer.py — runs as a long-lived process
+from kafka import KafkaConsumer
+import subprocess, json
+
+consumer = KafkaConsumer(
+    "saga.order.failed",
+    "saga.compensation.required",
+    bootstrap_servers="localhost:9092",
+    value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+)
+
+for message in consumer:
+    order_id = message.value["orderId"]
+    topic = message.topic
+    subprocess.run([
+        "python", "equiflow-mcp/escalation_agent.py",
+        order_id, topic
+    ])
+```
+
+The agent receives `order_id` and the triggering topic as CLI args. It investigates and either resolves the issue or escalates.
+
+**Tools required:**
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| `get_order` | Existing | Confirm failure status and retrieve saga ID |
+| `get_saga` | Existing | Identify which step failed and why |
+| `query_audit_log` | Existing | Retry count and last attempt time |
+| `get_ledger_account` | New (from EQ-131) | Check if account balance is the root cause |
+| `create_incident` | **New** | POST to PagerDuty — escalate non-recoverable failures to on-call |
+
+**New tool needed:**
+
+`create_incident(order_id, reason)` — calls PagerDuty API (handler lives in `equiflow_data_server.py`).
+See Q3 discussion for implementation. Requires `PAGERDUTY_API_KEY` and `PAGERDUTY_SERVICE_ID` in `.env`.
+
+**System prompt:**
+```
+You are an EquiFlow order failure escalation agent.
+
+An order has just failed. Your goal: diagnose the root cause and take
+the appropriate action without waiting for human input.
+
+Decision rules:
+- If failure_reason is TIMEOUT or NETWORK_ERROR and retry_count < 3:
+  recommend retry — do not escalate
+- If failure_reason is COMPLIANCE_FAILED or REJECTED:
+  do not retry — report as expected rejection, no incident needed
+- If failure_reason is INSUFFICIENT_FUNDS and the account now has sufficient balance:
+  recommend manual settlement retry
+- If failure_reason is INSUFFICIENT_FUNDS and the account still lacks funds:
+  create_incident — ops must contact the account holder
+- If saga status is COMPENSATION_REQUIRED:
+  always create_incident — manual financial reconciliation required
+
+Your final response must state:
+- Root cause (exact failure_reason from the data)
+- Action taken (recommended retry / incident created / no action needed)
+- Why
+```
+
+**Branching logic:**
+```
+get_order(order_id)
+  → get_saga(saga_id)
+    → if failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count < 3
+        → recommend retry (no tool call needed)
+    → if failure_reason in [COMPLIANCE_FAILED, REJECTED]
+        → report expected rejection, done
+    → if failure_reason == INSUFFICIENT_FUNDS
+        → get_ledger_account(user_id)
+          → if balance sufficient → recommend manual retry
+          → if balance insufficient → create_incident
+    → if saga.status == COMPENSATION_REQUIRED
+        → query_audit_log(order_id) for context
+        → create_incident
+```
+
+**File to create:** `equiflow-mcp/escalation_agent.py`
+**File to create:** `equiflow-mcp/kafka_consumer.py` (trigger wiring)
+
+---
+
 ## Backlog — Approved, Not Yet Scheduled
 
 ---
