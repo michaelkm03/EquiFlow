@@ -408,6 +408,86 @@ Open Docker Desktop → Settings → Resources → increase Memory to at least *
 
 ---
 
+## AI Agent
+
+EquiFlow includes an order triage agent built on [MCP (Model Context Protocol)](https://modelcontextprotocol.io) — the standard protocol (adopted by Anthropic, Google, OpenAI, and Microsoft) for connecting AI agents to external tools and data. The agent runs inside Claude Code and connects directly to EquiFlow's live services to investigate stuck or failed orders.
+
+### How it works
+
+When an order gets stuck, the agent runs a read-only triage flow across three services — deciding what to look at based on what each step returns:
+
+1. `get_order` — reads order status, type, and saga ID
+2. `get_saga` — traces which saga step failed and why
+3. `query_audit_log` — checks retry count and last attempt timestamp
+
+It returns a plain-language diagnosis: which service failed, what error, and what to do next.
+
+### Tools
+
+| Tool | Endpoint | Returns |
+|---|---|---|
+| `get_order` | `GET /orders/{id}` | Order status, saga ID, timestamps |
+| `get_saga` | `GET /sagas/{id}` | Step trace, failure reason, current state |
+| `query_audit_log` | `GET /audit/events/order/{orderId}` | Retry history, last attempt time |
+
+Auth is handled automatically — the server logs in as `bot-operator1` on first use.
+
+---
+
+### Setup
+
+**Prerequisites:** Claude Code, Python 3.11+, and the full stack running (`docker-compose up`).
+
+**1. Install dependencies**
+
+```bash
+cd equiflow-mcp
+pip install -r requirements.txt
+```
+
+**2. Register the server with Claude Code**
+
+The server is pre-configured in [.mcp.json](.mcp.json) and approved in [.claude/settings.json](.claude/settings.json). No additional config needed — Claude Code detects it automatically when you open the project.
+
+**3. Verify the connection**
+
+Open Claude Code in the project root and run:
+
+```
+/mcp
+```
+
+You should see `equiflow-data` listed as connected with three tools: `get_order`, `get_saga`, `query_audit_log`.
+
+---
+
+### Example Usage
+
+With the stack running, open Claude Code in the project root and ask:
+
+> "Order `{uuid}` has been stuck for 20 minutes. What's wrong?"
+
+The agent calls the three tools in sequence and returns something like:
+
+> Order is in `PENDING_SETTLEMENT` state. Saga step 3 (settlement-service) failed with `INSUFFICIENT_FUNDS` at 14:23. The audit log shows 3 retry attempts — the last one was 18 minutes ago with no further attempts since. Recommend: check the ledger balance for the account and manually trigger a retry or escalate.
+
+To get a real order UUID, place an order first:
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"username":"trader1","password":"password123"}' | jq -r .token)
+
+curl -X POST http://localhost:8080/orders \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ticker":"AAPL","side":"BUY","type":"MARKET","quantity":10}'
+```
+
+Then paste the returned `orderId` into your Claude Code prompt.
+
+---
+
 ## Full Documentation
 
 See [`docs/SPEC.md`](docs/SPEC.md) for the complete product and technical specification including all API endpoints with request/response examples.

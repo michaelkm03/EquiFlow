@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "equiflow-data": {
+      "command": "python",
+      "args": ["equiflow-mcp/equiflow_data_server.py"]
+    }
+  }
+}
