@@ -520,6 +520,35 @@ To change what the agent is capable of or how it sequences its calls, edit the d
 
 ---
 
+**Handler structure**
+
+Each tool has its own handler function. `call_tool` only routes — it holds no business logic:
+
+```python
+async def handle_get_order(args: dict) -> list[TextContent]:
+    r = await authed_get(f"/orders/{args['order_id']}")
+    if not r.is_success:
+        return [TextContent(type="text", text=f"Error {r.status_code}: {r.text}")]
+    return [TextContent(type="text", text=r.text)]
+
+HANDLERS = {
+    "get_order":       handle_get_order,
+    "get_saga":        handle_get_saga,
+    "query_audit_log": handle_query_audit_log,
+}
+
+@server.call_tool()
+async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    handler = HANDLERS.get(name)
+    if handler is None:
+        return [TextContent(type="text", text=f"Unknown tool: {name}")]
+    return await handler(arguments)
+```
+
+Each handler owns its own error handling. Adding a new tool means writing one new function and adding one line to `HANDLERS` — `call_tool` never changes.
+
+---
+
 ## Full Documentation
 
 See [`docs/SPEC.md`](docs/SPEC.md) for the complete product and technical specification including all API endpoints with request/response examples.
