@@ -46,3 +46,6 @@ postgres_data/
 
 # Claude memory
 memory/
+
+# Learning notes
+LEARNING.md
