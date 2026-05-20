@@ -79,6 +79,57 @@ async def list_tools() -> list[Tool]:
             },
         ),
         Tool(
+            name="list_orders",
+            description=(
+                "List orders from the EquiFlow database with optional filtering. "
+                "Supports filtering by status, ticker symbol, and date range. "
+                "Returns paginated results sorted by createdAt descending. "
+                "Use this to find a real order_id before calling get_order or query_audit_log."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "PENDING",
+                            "COMPLIANCE_CHECK",
+                            "OPEN",
+                            "FILLED",
+                            "PARTIALLY_FILLED",
+                            "CANCELLED",
+                            "REJECTED",
+                            "FAILED",
+                            "PENDING_TRIGGER",
+                            "TRIGGERED",
+                        ],
+                        "description": "Filter by order status",
+                    },
+                    "ticker": {
+                        "type": "string",
+                        "description": "Filter by ticker symbol (e.g. AAPL)",
+                    },
+                    "from": {
+                        "type": "string",
+                        "description": "Start date filter in YYYY-MM-DD format",
+                    },
+                    "to": {
+                        "type": "string",
+                        "description": "End date filter in YYYY-MM-DD format",
+                    },
+                    "page": {
+                        "type": "integer",
+                        "description": "Page number (0-based, default 0)",
+                    },
+                    "size": {
+                        "type": "integer",
+                        "description": "Page size (default 25)",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
             name="query_audit_log",
             description=(
                 "Get the full append-only audit trail for a specific order by UUID. "
@@ -103,6 +154,10 @@ async def list_tools() -> list[Tool]:
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     if name == "get_order":
         r = await authed_get(f"/orders/{arguments['order_id']}")
+    elif name == "list_orders":
+        params = {k: v for k, v in arguments.items() if v is not None}
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        r = await authed_get(f"/orders{'?' + query if query else ''}")
     elif name == "get_saga":
         r = await authed_get(f"/sagas/{arguments['saga_id']}")
     elif name == "query_audit_log":

@@ -488,6 +488,38 @@ Then paste the returned `orderId` into your Claude Code prompt.
 
 ---
 
+### Inspecting the agent's capabilities
+
+**Quick check — tool names only**
+
+Run inside Claude Code:
+
+```
+/mcp
+```
+
+Shows all connected MCP servers and their registered tool names.
+
+**Full schema — descriptions, inputs, and required fields**
+
+```bash
+npx @modelcontextprotocol/inspector python equiflow-mcp/equiflow_data_server.py
+```
+
+Opens a browser UI with every tool's full description and input schema. Use this to audit exactly what the agent knows how to do and what arguments each tool requires.
+
+**How the agent decides what to do**
+
+There is no hardcoded question map. The tool descriptions in `equiflow_data_server.py` are what the agent reads at runtime to decide which tool to call and when. Each description encodes three things:
+
+- What the tool returns
+- When to use it (`"Use this first"`, `"Use after get_order"`)
+- Why (`"to identify which step failed and why"`)
+
+To change what the agent is capable of or how it sequences its calls, edit the descriptions in `list_tools()`.
+
+---
+
 ## Full Documentation
 
 See [`docs/SPEC.md`](docs/SPEC.md) for the complete product and technical specification including all API endpoints with request/response examples.
