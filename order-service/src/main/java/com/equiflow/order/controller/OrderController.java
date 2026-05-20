@@ -123,6 +123,21 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getOrderBook(ticker));
     }
 
+    @GetMapping("/internal/all")
+    @Operation(summary = "List all orders across all users (internal use by compliance agent)")
+    public ResponseEntity<Page<OrderResponse>> listAllOrders(
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            @RequestParam(required = false) LocalDate from,
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+            @RequestParam(required = false) LocalDate to,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String ticker,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size) {
+        PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        return ResponseEntity.ok(orderService.listOrders(from, to, status, ticker, null, pageable));
+    }
+
     @PostMapping("/internal/stop-loss/evaluate")
     @Operation(summary = "Evaluate stop-loss triggers for a ticker (internal use by market-data-service)")
     public ResponseEntity<Void> evaluateStopLoss(

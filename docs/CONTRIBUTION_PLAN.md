@@ -1142,6 +1142,555 @@ mvn verify -pl ledger-service
 
 ---
 
+## Backlog — AI Agents
+
+Three agents, one per invocation pattern. Each builds on the existing `run_agent()` loop in `equiflow-mcp/agent.py` and the handler registry in `equiflow_data_server.py`. The loop itself does not change — only the system prompt, tools, and trigger wiring differ.
+
+| Status | Ticket | Task | Points | Priority |
+|--------|--------|------|--------|----------|
+| ✅ | <nobr>[EQ-130](#eq-130--on-demand-compliance-breach-summary-agent)</nobr> | On-Demand Compliance Breach Summary Agent | 3 | P1 |
+| ⚪ | <nobr>[EQ-133](#eq-133--agent-test-suite-compliance-agent)</nobr> | Agent Test Suite — Compliance Agent | 3 | P1 — depends on EQ-130 |
+| ⚪ | <nobr>[EQ-131](#eq-131--scheduled-eod-settlement-reconciliation-agent)</nobr> | Scheduled EOD Settlement Reconciliation Agent | 5 | P1 |
+| ⚪ | <nobr>[EQ-134](#eq-134--agent-test-suite-settlement-reconciliation-agent)</nobr> | Agent Test Suite — Settlement Reconciliation Agent | 3 | P1 — depends on EQ-131 |
+| ⚪ | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 |
+| ⚪ | <nobr>[EQ-135](#eq-135--agent-test-suite-order-failure-escalation-agent)</nobr> | Agent Test Suite — Order Failure Escalation Agent | 3 | P1 — depends on EQ-132 |
+
+---
+
+### EQ-130 · On-Demand: Compliance Breach Summary Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 3 | P1 |
+
+**Invocation pattern:** On-demand — a human runs it from the CLI.
+
+**Problem it solves:** Compliance officers today manually query rejected orders, cross-reference the compliance check results for each, and group by failure type. This takes 15–30 minutes each morning. This agent does it in one command.
+
+**Example usage:**
+```bash
+python equiflow-mcp/compliance_agent.py "Show me today's compliance breaches"
+python equiflow-mcp/compliance_agent.py "Which accounts have repeated wash-sale violations this week?"
+```
+
+**Tools required:**
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| `list_orders` | Existing | Filter by `status=REJECTED` and date range |
+| `get_order` | Existing | Retrieve saga ID per rejected order |
+| `get_compliance_result` | **New** | `GET /compliance/results/order/{orderId}` — returns failure reason, violation type, check timestamp |
+
+**New endpoint needed:**
+
+`GET /compliance/results/order/{orderId}` on `compliance-service`
+- Returns: `{ orderId, violationType: "WASH_SALE" | "INSUFFICIENT_FUNDS", failureReason, checkedAt }`
+- Auth: BOT_OPERATOR role
+
+**System prompt:**
+```
+You are an EquiFlow compliance monitoring agent.
+
+Your goal: summarise all compliance breaches for the requested time period
+so a compliance officer can review them in one read.
+
+Your final response must include:
+- Total breach count
+- Breakdown by violation type (WASH_SALE vs INSUFFICIENT_FUNDS)
+- Which accounts appear more than once (repeat offenders)
+- The most recent breach per account
+
+Do not include order IDs unless the user asks for them.
+Do not speculate on why a breach occurred beyond what the data shows.
+```
+
+**Branching logic:**
+```
+list_orders(status=REJECTED, from=today)
+  → for each order: get_compliance_result(order_id)
+    → group by violationType
+    → identify repeat accounts
+  → summarise
+```
+
+**File to create:** `equiflow-mcp/compliance_agent.py`
+
+---
+
+### EQ-131 · Scheduled: EOD Settlement Reconciliation Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 5 | P1 |
+
+**Invocation pattern:** Scheduled — runs automatically at 4:05 PM ET every trading day after the settlement scheduler has run.
+
+**Problem it solves:** After market close, settlement-service marks filled orders as SETTLED. Any that remain PENDING_SETTLEMENT after the scheduler runs represent failures. Today no one knows about them until a trader complains. This agent surfaces them proactively.
+
+**Trigger wiring:**
+```bash
+# cron entry (crontab or Windows Task Scheduler)
+# runs at 4:05 PM ET Mon–Fri
+5 16 * * 1-5 python /path/to/equiflow-mcp/settlement_agent.py
+```
+
+**Tools required:**
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| `list_orders` | Existing | Filter by `status=FILLED`, `from=today` |
+| `get_order` | Existing | Retrieve settlement status and saga ID |
+| `query_audit_log` | Existing | Check retry history for stuck settlements |
+| `get_ledger_account` | **New** | `GET /ledger/accounts/{userId}` — verify cash balance for accounts with pending settlements |
+| `list_settlements` | **New** | `GET /settlement/records?orderId={orderId}` — returns settlement record status and date |
+
+**New endpoints needed:**
+
+`GET /settlement/records?orderId={orderId}` on `settlement-service`
+- Returns: `{ orderId, status: "PENDING_SETTLEMENT" | "SETTLED", settlementDate, settledAt }`
+- Auth: BOT_OPERATOR role
+
+`GET /ledger/accounts/{userId}` already exists — confirm it's accessible to BOT_OPERATOR.
+
+**System prompt:**
+```
+You are an EquiFlow end-of-day settlement reconciliation agent.
+
+Today's market has closed. Your goal: identify any filled orders from today
+that have not yet settled and assess whether intervention is needed.
+
+For each unsettled order:
+1. Check its settlement record status
+2. Check the audit log for retry history
+3. Check the account's ledger balance
+
+Your final response must state:
+- How many orders settled successfully today
+- How many remain PENDING_SETTLEMENT (if any)
+- For each stuck order: order ID, failure reason, retry count, account balance
+- Recommended action: auto-retry eligible, needs manual credit, or escalate to ops
+
+If all orders settled cleanly, say so clearly.
+```
+
+**Branching logic:**
+```
+list_orders(status=FILLED, from=today)
+  → for each: list_settlements(order_id)
+    → if SETTLED → count as success
+    → if PENDING_SETTLEMENT:
+        query_audit_log(order_id)  → retry count, last attempt
+        get_ledger_account(user_id) → current balance
+        → classify: retriable | needs manual credit | escalate
+  → summarise
+```
+
+**File to create:** `equiflow-mcp/settlement_agent.py`
+
+---
+
+### EQ-132 · Triggered: Order Failure Escalation Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 5 | P1 |
+
+**Invocation pattern:** Triggered — fires automatically when an order reaches `FAILED` or `COMPENSATION_REQUIRED` status via a Kafka event.
+
+**Problem it solves:** When a saga fails, ops today receives a Kafka event with an order ID and nothing else. They then manually trace through the saga, audit log, and ledger to understand what happened and decide whether to retry, credit the account, or escalate. This agent does that trace automatically and emits a structured decision.
+
+**Trigger wiring:**
+```python
+# kafka_consumer.py — runs as a long-lived process
+from kafka import KafkaConsumer
+import subprocess, json
+
+consumer = KafkaConsumer(
+    "saga.order.failed",
+    "saga.compensation.required",
+    bootstrap_servers="localhost:9092",
+    value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+)
+
+for message in consumer:
+    order_id = message.value["orderId"]
+    topic = message.topic
+    subprocess.run([
+        "python", "equiflow-mcp/escalation_agent.py",
+        order_id, topic
+    ])
+```
+
+The agent receives `order_id` and the triggering topic as CLI args. It investigates and either resolves the issue or escalates.
+
+**Tools required:**
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| `get_order` | Existing | Confirm failure status and retrieve saga ID |
+| `get_saga` | Existing | Identify which step failed and why |
+| `query_audit_log` | Existing | Retry count and last attempt time |
+| `get_ledger_account` | New (from EQ-131) | Check if account balance is the root cause |
+| `create_incident` | **New** | POST to PagerDuty — escalate non-recoverable failures to on-call |
+
+**New tool needed:**
+
+`create_incident(order_id, reason)` — calls PagerDuty API (handler lives in `equiflow_data_server.py`).
+See Q3 discussion for implementation. Requires `PAGERDUTY_API_KEY` and `PAGERDUTY_SERVICE_ID` in `.env`.
+
+**System prompt:**
+```
+You are an EquiFlow order failure escalation agent.
+
+An order has just failed. Your goal: diagnose the root cause and take
+the appropriate action without waiting for human input.
+
+Decision rules:
+- If failure_reason is TIMEOUT or NETWORK_ERROR and retry_count < 3:
+  recommend retry — do not escalate
+- If failure_reason is COMPLIANCE_FAILED or REJECTED:
+  do not retry — report as expected rejection, no incident needed
+- If failure_reason is INSUFFICIENT_FUNDS and the account now has sufficient balance:
+  recommend manual settlement retry
+- If failure_reason is INSUFFICIENT_FUNDS and the account still lacks funds:
+  create_incident — ops must contact the account holder
+- If saga status is COMPENSATION_REQUIRED:
+  always create_incident — manual financial reconciliation required
+
+Your final response must state:
+- Root cause (exact failure_reason from the data)
+- Action taken (recommended retry / incident created / no action needed)
+- Why
+```
+
+**Branching logic:**
+```
+get_order(order_id)
+  → get_saga(saga_id)
+    → if failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count < 3
+        → recommend retry (no tool call needed)
+    → if failure_reason in [COMPLIANCE_FAILED, REJECTED]
+        → report expected rejection, done
+    → if failure_reason == INSUFFICIENT_FUNDS
+        → get_ledger_account(user_id)
+          → if balance sufficient → recommend manual retry
+          → if balance insufficient → create_incident
+    → if saga.status == COMPENSATION_REQUIRED
+        → query_audit_log(order_id) for context
+        → create_incident
+```
+
+**File to create:** `equiflow-mcp/escalation_agent.py`
+**File to create:** `equiflow-mcp/kafka_consumer.py` (trigger wiring)
+
+---
+
+---
+
+---
+
+## Agent Testing Architecture
+
+Agentic code has two failure modes standard unit tests don't catch: **loop failures** (wrong message order, missed stop reason, runaway iterations) and **behavioral failures** (wrong tool call sequence, missing required output sections, bad decision branches). The three-tier test architecture covers both.
+
+**Testing pyramid:**
+
+```
+        ▲
+       /T3\        End-to-end / Golden   ~5%    real model, real data, run manually
+      /----\
+     / T2   \      Behavioral             ~20%   mock LLM + HTTP, run on every PR
+    /--------\
+   /    T1    \    Unit                   ~75%   mock everything, run on every commit
+  /____________\
+```
+
+| | Tier 1 — Unit | Tier 2 — Behavioral | Tier 3 — Golden |
+|---|---|---|---|
+| **Traditional equivalent** | `OrderServiceTest` — one class, mocked deps | `@WebMvcTest` — slice wired, external I/O mocked | Testcontainers — real Postgres + Kafka |
+| **What's mocked** | Anthropic API, httpx, everything | Anthropic API + HTTP to services | Nothing — golden file replays saved model responses |
+| **What runs real** | Loop logic, handler URL building | Loop, dispatch, handler logic | Loop, dispatch, handlers, real services, real DB |
+| **LLM called?** | No | No | No (golden file replay) |
+| **Speed** | <1 ms | <100 ms | 10–30 s |
+| **Cost** | Free | Free | API credits on record; free on replay |
+| **Runs in CI?** | Yes | Yes | No |
+| **When to run** | Every commit | Every PR | Before prompt changes, model upgrades, releases |
+| **What it catches** | Loop bugs, URL construction, error handling | Wrong tool sequence, missing output sections, bad branches | Real model regressions, stale tool return shapes |
+
+**How the golden file works (Tier 3):**
+The Anthropic API is called once during recording. Every model response — including tool calls and the final answer — is saved to a JSON fixture. On replay, a mock intercepts `client.messages.create()` and returns the saved response instead of calling the network. The loop code runs for real against real services; only the model is frozen. This removes LLM non-determinism from test runs while still validating the full stack.
+
+**How golden files go stale:** system prompt changes, model upgrade, new tools added to the server, or seed data changes. When any of these happen, re-run `record_golden.py` and commit the updated fixture.
+
+**Assertion rule for Tier 2 + 3:** assert facts, not exact strings.
+```python
+assert "3" in answer                 # count present — survives rephrasing
+assert "WASH_SALE" in answer         # violation type named
+assert "repeat" in answer.lower()    # concept present
+# NOT: assert answer == "3 breaches detected this week"
+```
+
+**Shared test files across all three agents:**
+
+```
+equiflow-mcp/
+  tests/
+    __init__.py
+    fixtures/                             # JSON fixtures for Tier 2 + Tier 3 golden files
+    test_loop.py                          # Tier 1 — shared loop mechanics (all agents)
+    test_handlers.py                      # Tier 1 — handler URL + error logic (grows per agent)
+    test_compliance_agent_behavior.py     # Tier 2 — EQ-133
+    test_settlement_agent_behavior.py     # Tier 2 — EQ-134
+    test_escalation_agent_behavior.py     # Tier 2 — EQ-135
+    record_golden.py                      # Tier 3 — records a real conversation to fixture
+    test_compliance_agent_e2e.py          # Tier 3 — replay golden, assert facts (EQ-133)
+  requirements-test.txt
+```
+
+**Run all tests:**
+```bash
+cd equiflow-mcp
+pip install -r requirements-test.txt
+pytest tests/ -v
+```
+
+---
+
+### EQ-133 · Agent Test Suite — Compliance Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Engineering | 3 | P1 — depends on EQ-130 |
+
+**Problem:**
+Agentic code has two failure modes standard unit tests do not catch: loop failures (wrong message building, missed stop reasons, runaway iterations) and behavioral failures (agent calls the wrong tools, misses required output sections, or hallucinates beyond the data). This ticket adds a two-tier test suite that covers both, plus documents the Tier 3 golden file approach.
+
+**Test architecture:**
+
+```
+Tier 1: Unit tests       — mock Anthropic + mock HTTP, pure logic
+Tier 2: Behavioral tests — fixed mock LLM responses, assert output facts
+Tier 3: Golden replay    — record real conversation once, replay deterministically (manual only)
+```
+
+---
+
+**Tier 1 — Unit Tests**
+
+**`tests/test_loop.py`** — tests `run_agent()` in isolation. Mocks `anthropic.Anthropic`. No real API calls.
+
+| Test | Scenario | Assert |
+|------|----------|--------|
+| `test_end_turn_returns_text` | Model returns `end_turn` immediately | Loop exits after 1 iteration; correct text returned |
+| `test_single_tool_call_then_end_turn` | Model returns `tool_use`, then `end_turn` | Tool called once with correct args; final text returned |
+| `test_parallel_tool_calls_collected` | Model returns two tool blocks in one response | Both tools called before next model turn; results collected in one turn |
+| `test_max_iterations_returns_error` | Model never stops (`tool_use` every turn) | Loop exits after cap; returns iteration-limit error string |
+| `test_max_tokens_returns_error` | `stop_reason=max_tokens` | Returns specific max-tokens error string; no exception |
+| `test_unknown_tool_returns_error_string` | Tool name not in dispatch | `"Unknown tool: x"` returned as tool result; loop continues |
+
+**`tests/test_handlers.py`** — tests each handler in `equiflow_data_server.py`. Mocks `httpx`. No real HTTP calls.
+
+| Test | Scenario | Assert |
+|------|----------|--------|
+| `test_list_orders_no_filters` | Empty args dict | Calls `GET /orders/internal/all` with no query string |
+| `test_list_orders_with_filters` | `status=REJECTED`, `from=2026-05-20` | URL contains `?status=REJECTED&from=2026-05-20` |
+| `test_list_orders_http_error` | Server returns 500 | Returns `"Error 500: ..."` text; no exception raised |
+| `test_get_compliance_result_success` | 200 response with violation JSON | Returns response text unchanged |
+| `test_get_compliance_result_404` | Server returns 404 | Returns `"Error 404: ..."` text; no exception |
+| `test_token_fetched_on_first_call` | `_token` is None | `get_token()` called; request includes `Authorization: Bearer` header |
+| `test_token_refreshed_on_401` | First request returns 401 | Token refreshed; request retried exactly once |
+
+---
+
+**Tier 2 — Behavioral Tests**
+
+**`tests/test_compliance_agent_behavior.py`** — mocks both Anthropic and HTTP. Feeds the agent scripted LLM responses and scripted tool returns. Runs real `loop.py` and `compliance_agent.py` dispatch code. Asserts output **facts**, not exact strings.
+
+**Key principle:** assert the data point is present, not the exact wording. The model may phrase "3 breaches detected" or "Total: 3" — both are correct. Asserting `"3" in answer` survives prompt changes and model upgrades.
+
+```python
+# Example — not exact wording, but required facts
+assert "3" in answer                    # breach count present
+assert "WASH_SALE" in answer            # violation type named
+assert "INSUFFICIENT_FUNDS" in answer   # other type named
+assert "repeat" in answer.lower()       # repeat offender concept mentioned
+mock_call_tool.assert_called_with(      # correct tool args
+    "list_orders", {"status": "REJECTED", "from": "2026-05-20", "to": "2026-05-20"}
+)
+```
+
+| Test | Scripted scenario | Fact assertions |
+|------|-------------------|-----------------|
+| `test_full_breach_report` | 3 rejected orders: 2 INSUFFICIENT_FUNDS + 1 WASH_SALE | `"3"` in answer; both violation type names present; repeat offender account mentioned |
+| `test_no_breaches_returns_clear_message` | `list_orders` returns empty content | Answer says no breaches; `get_compliance_result` never called |
+| `test_wash_sale_filter` | 3 orders: 1 WASH_SALE + 2 INSUFFICIENT_FUNDS; user asks wash-sale only | `"WASH_SALE"` in answer; agent does not lead with INSUFFICIENT_FUNDS detail |
+| `test_repeat_offender_flagged` | Same `userId` appears in 2 of 3 results | Answer references that account; `"repeat"` or `"2"` associated with that account |
+| `test_get_order_never_called` | Full run | `get_order` never invoked — confirm removed tool stays removed |
+| `test_pagination_followed` | First page `last=false` with 25 results; second page has 3 | Total breach count reflects 28; `list_orders` called twice with page params |
+
+---
+
+---
+
+**Tier 3 — Golden File Replay (manual, not in CI)**
+
+**`tests/record_golden.py`** — one-time recorder. Hits the real Anthropic API and saves the full conversation (every model response, tool call, tool result, and final answer) to `tests/fixtures/golden_compliance_today.json`. Run once after a major prompt change or model upgrade.
+
+**`tests/test_compliance_agent_e2e.py`** — replay harness. Mocks `anthropic.Anthropic` to return saved responses instead of calling the network. Tool handlers still call real services (Docker stack required). Same fact assertions as Tier 2.
+
+```bash
+# Step 1 — record (requires Docker stack + ANTHROPIC_API_KEY)
+python equiflow-mcp/tests/record_golden.py "Show me today's compliance breaches"
+
+# Step 2 — replay (no API call — deterministic)
+pytest equiflow-mcp/tests/test_compliance_agent_e2e.py -v
+```
+
+**Golden file structure:**
+```json
+{
+  "question": "Show me today's compliance breaches",
+  "turns": [
+    {
+      "model_response": { "stop_reason": "tool_use", "content": [...] },
+      "tool_results": [{ "name": "list_orders", "result": "..." }]
+    },
+    {
+      "model_response": { "stop_reason": "end_turn", "content": [{ "text": "..." }] }
+    }
+  ]
+}
+```
+
+**When to re-record:** system prompt changed, model version upgraded, new tool added to compliance agent, seed data changed significantly.
+
+**What Tier 3 catches that Tier 2 misses:** model upgraded and now calls tools in a different order than the scripted mock expected; new tool added to the server confuses the model into calling it unnecessarily; real API response shape changed and the mocked tool return in Tier 2 was stale.
+
+---
+
+**File structure:**
+
+```
+equiflow-mcp/
+  tests/
+    __init__.py
+    fixtures/
+      list_orders_3_rejected.json
+      compliance_result_insufficient_funds.json
+      compliance_result_wash_sale.json
+      golden_compliance_today.json        # Tier 3 golden fixture (committed after recording)
+    test_loop.py
+    test_handlers.py
+    test_compliance_agent_behavior.py
+    record_golden.py                      # Tier 3 recorder (run manually)
+    test_compliance_agent_e2e.py          # Tier 3 replay harness
+  requirements-test.txt              # pytest, pytest-asyncio, pytest-mock
+```
+
+**Run all tests:**
+```bash
+cd equiflow-mcp
+pip install -r requirements-test.txt
+pytest tests/ -v
+```
+
+**Acceptance Criteria:**
+- [ ] All Tier 1 tests pass with zero real network calls (verified by asserting no `httpx` or `anthropic` calls reach external hosts)
+- [ ] All Tier 2 behavioral tests pass with zero real Anthropic or HTTP calls
+- [ ] `pytest tests/` exits 0 in CI
+- [ ] Each test has a one-line docstring stating the scenario it covers
+- [ ] `record_golden.py` exists and produces a valid golden fixture when run against a live stack
+- [ ] `test_compliance_agent_e2e.py` replays the golden fixture with zero Anthropic API calls and passes fact assertions
+
+---
+
+---
+
+### EQ-134 · Agent Test Suite — Settlement Reconciliation Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Engineering | 3 | P1 — depends on EQ-131 |
+
+**Problem:** Same two failure modes as EQ-133, applied to `settlement_agent.py`. The settlement agent has more branching than the compliance agent (SETTLED vs PENDING_SETTLEMENT paths, retry classification, ledger balance checks) — behavioral tests are especially important here because a wrong branch produces a misleading ops recommendation.
+
+**Tier 1 — Unit Tests**
+
+**`tests/test_handlers.py` additions** — new handlers introduced in EQ-131.
+
+| Test | Scenario | Assert |
+|------|----------|--------|
+| `test_list_settlements_success` | 200 response | Calls `GET /settlement/records?orderId=...`; returns response text |
+| `test_list_settlements_not_found` | 404 response | Returns `"Error 404: ..."` text; no exception |
+| `test_get_ledger_account_success` | 200 response | Calls `GET /ledger/accounts/{userId}`; returns response text |
+| `test_get_ledger_account_not_found` | 404 response | Returns `"Error 404: ..."` text; no exception |
+
+**Tier 2 — Behavioral Tests**
+
+**`tests/test_settlement_agent_behavior.py`**
+
+| Test | Scripted scenario | Fact assertions |
+|------|-------------------|-----------------|
+| `test_all_settled_clean_report` | 5 FILLED orders, all `status=SETTLED` | Answer says all settled; no stuck orders mentioned; `get_ledger_account` never called |
+| `test_one_stuck_order_flagged` | 5 FILLED orders, 1 `PENDING_SETTLEMENT`; audit log shows 1 retry; balance sufficient | Answer mentions 1 stuck order; retry count present; recommended action present |
+| `test_insufficient_balance_escalate` | 1 stuck order; balance below fill amount | Answer recommends manual credit or escalation; account balance mentioned |
+| `test_no_filled_orders_today` | `list_orders` returns empty | Answer says no filled orders; no further tool calls |
+| `test_retry_count_drives_recommendation` | 1 stuck order; audit log shows 3 retries | Answer does not recommend auto-retry (threshold exceeded); escalation mentioned |
+| `test_multiple_stuck_orders_all_reported` | 3 stuck orders across 2 users | All 3 referenced in answer; per-order detail present |
+
+**Run:**
+```bash
+pytest tests/test_handlers.py tests/test_settlement_agent_behavior.py -v
+```
+
+**Acceptance Criteria:**
+- [ ] All Tier 1 handler tests for new EQ-131 endpoints pass with zero real HTTP calls
+- [ ] All Tier 2 behavioral tests pass with zero real Anthropic or HTTP calls
+- [ ] `pytest tests/` exits 0 in CI alongside EQ-133 tests
+
+---
+
+### EQ-135 · Agent Test Suite — Order Failure Escalation Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Engineering | 3 | P1 — depends on EQ-132 |
+
+**Problem:** The escalation agent has explicit decision rules in its system prompt — specific failure reasons map to specific actions (retry, manual credit, incident). A behavioral test suite is the only way to verify the agent follows those rules correctly with a given set of tool results. A wrong branch here creates or suppresses a PagerDuty incident.
+
+**Tier 1 — Unit Tests**
+
+**`tests/test_handlers.py` additions** — new handler introduced in EQ-132.
+
+| Test | Scenario | Assert |
+|------|----------|--------|
+| `test_create_incident_success` | PagerDuty returns 201 | Calls correct endpoint; returns success text |
+| `test_create_incident_api_error` | PagerDuty returns 500 | Returns `"Error 500: ..."` text; no exception |
+| `test_create_incident_includes_order_id` | Any call | `order_id` present in request body |
+
+**Tier 2 — Behavioral Tests**
+
+**`tests/test_escalation_agent_behavior.py`**
+
+Each test scripts the full tool chain: `get_order` → `get_saga` → optional further calls.
+
+| Test | Scripted scenario | Fact assertions |
+|------|-------------------|-----------------|
+| `test_timeout_low_retries_recommends_retry` | `failure_reason=TIMEOUT`, `retry_count=1` | Answer recommends retry; `create_incident` never called |
+| `test_network_error_at_retry_limit_escalates` | `failure_reason=NETWORK_ERROR`, `retry_count=3` | `create_incident` called; answer mentions retry limit reached |
+| `test_compliance_rejection_no_action` | `failure_reason=COMPLIANCE_FAILED` | Answer says expected rejection; no incident; no ledger lookup |
+| `test_insufficient_funds_balance_now_sufficient` | `failure_reason=INSUFFICIENT_FUNDS`; ledger shows balance > fill amount | Answer recommends manual retry; `create_incident` not called |
+| `test_insufficient_funds_balance_still_low` | `failure_reason=INSUFFICIENT_FUNDS`; ledger shows balance < fill amount | `create_incident` called; answer mentions account balance |
+| `test_compensation_required_always_escalates` | `saga.status=COMPENSATION_REQUIRED` | `create_incident` always called regardless of failure reason |
+| `test_root_cause_always_stated` | Any scenario | `failure_reason` value from data appears in answer |
+
+**Run:**
+```bash
+pytest tests/test_handlers.py tests/test_escalation_agent_behavior.py -v
+```
+
+**Acceptance Criteria:**
+- [ ] All Tier 1 handler tests for `create_incident` pass with zero real HTTP calls
+- [ ] All Tier 2 behavioral tests pass with zero real Anthropic or HTTP calls
+- [ ] Decision rules in the system prompt are each covered by at least one test case
+- [ ] `pytest tests/` exits 0 in CI alongside EQ-133 and EQ-134 tests
+
+---
+
 ## Backlog — Approved, Not Yet Scheduled
 
 ---

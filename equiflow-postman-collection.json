@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "equiflow-api-collection-v2",
     "name": "Equiflow API",
-    "description": "Complete API collection for the Equiflow trading platform.\n\nAll requests route through the API Gateway at {{base_url}} (default: http://localhost:8080).\n\n## Quick start\n1. Run all 4 requests in **00 - Setup & Auth** top-to-bottom — this logs in every seeded user and saves their tokens automatically.\n2. Use any individual endpoint folder or jump straight to **11 - Workflows** for guided multi-step flows.\n\n## Seeded users (password: `password123`)\n| User | Role | Ledger |\n|---|---|---|\n| trader1 | TRADER | $100,000 |\n| trader2 | TRADER | $100,000 |\n| regulator1 | REGULATOR | none |\n| bot-operator1 | BOT_OPERATOR | none |\n\n## Order status lifecycle\nPENDING → COMPLIANCE_CHECK → OPEN → FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED",
+    "description": "Complete API collection for the Equiflow trading platform.\n\nAll requests route through the API Gateway at {{base_url}} (default: http://localhost:8080).\n\n## Quick start\n1. Run all 4 requests in **00 - Setup & Auth** top-to-bottom \u00e2\u20ac\u201d this logs in every seeded user and saves their tokens automatically.\n2. Use any individual endpoint folder or jump straight to **11 - Workflows** for guided multi-step flows.\n\n## Seeded users (password: `password123`)\n| User | Role | Ledger |\n|---|---|---|\n| trader1 | TRADER | $100,000 |\n| trader2 | TRADER | $100,000 |\n| regulator1 | REGULATOR | none |\n| bot-operator1 | BOT_OPERATOR | none |\n\n## Order status lifecycle\nPENDING \u00e2\u2020\u2019 COMPLIANCE_CHECK \u00e2\u2020\u2019 OPEN \u00e2\u2020\u2019 FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -91,7 +91,7 @@
       "description": "Run these 4 requests in order before using anything else. Each login saves its token to a collection variable so all subsequent requests are pre-authorised.",
       "item": [
         {
-          "name": "Smoke Test — GET /market/prices",
+          "name": "Smoke Test \u00e2\u20ac\u201d GET /market/prices",
           "request": {
             "auth": {
               "type": "noauth"
@@ -113,7 +113,7 @@
           "response": []
         },
         {
-          "name": "Login — trader1",
+          "name": "Login \u00e2\u20ac\u201d trader1",
           "event": [
             {
               "listen": "test",
@@ -161,7 +161,7 @@
           "response": []
         },
         {
-          "name": "Login — trader2",
+          "name": "Login \u00e2\u20ac\u201d trader2",
           "event": [
             {
               "listen": "test",
@@ -209,7 +209,7 @@
           "response": []
         },
         {
-          "name": "Login — regulator1",
+          "name": "Login \u00e2\u20ac\u201d regulator1",
           "event": [
             {
               "listen": "test",
@@ -257,7 +257,7 @@
           "response": []
         },
         {
-          "name": "Login — bot-operator1",
+          "name": "Login \u00e2\u20ac\u201d bot-operator1",
           "event": [
             {
               "listen": "test",
@@ -311,7 +311,7 @@
       "description": "JWT token issuance and validation. Port 8081, routed via gateway at /auth/**.",
       "item": [
         {
-          "name": "POST /auth/token — Issue JWT Token",
+          "name": "POST /auth/token \u00e2\u20ac\u201d Issue JWT Token",
           "event": [
             {
               "listen": "test",
@@ -361,7 +361,7 @@
           },
           "response": [
             {
-              "name": "200 OK — trader1",
+              "name": "200 OK \u00e2\u20ac\u201d trader1",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -390,7 +390,7 @@
               "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0cmFkZXIxIiwicm9sZSI6IlRSQURFUiIsInVzZXJJZCI6ImExMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMSIsImlhdCI6MTcxMDY4MDAwMCwiZXhwIjoxNzEwNzY2NDAwfQ.example_signature\",\n  \"expiresAt\": \"2024-03-18T10:00:00Z\",\n  \"role\": \"TRADER\",\n  \"username\": \"trader1\"\n}"
             },
             {
-              "name": "200 OK — regulator1",
+              "name": "200 OK \u00e2\u20ac\u201d regulator1",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -419,7 +419,7 @@
               "body": "{\n  \"token\": \"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJyZWd1bGF0b3IxIiwicm9sZSI6IlJFR1VMQVRPUiIsInVzZXJJZCI6ImExMDAwMDAwLTAwMDAtMDAwMC0wMDAwLTAwMDAwMDAwMDAwMiIsImlhdCI6MTcxMDY4MDAwMCwiZXhwIjoxNzEwNzY2NDAwfQ.example_signature\",\n  \"expiresAt\": \"2024-03-18T10:00:00Z\",\n  \"role\": \"REGULATOR\",\n  \"username\": \"regulator1\"\n}"
             },
             {
-              "name": "401 Unauthorized — bad credentials",
+              "name": "401 Unauthorized \u00e2\u20ac\u201d bad credentials",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -450,7 +450,7 @@
           ]
         },
         {
-          "name": "GET /auth/validate — Validate Token",
+          "name": "GET /auth/validate \u00e2\u20ac\u201d Validate Token",
           "request": {
             "method": "GET",
             "header": [],
@@ -468,7 +468,7 @@
           },
           "response": [
             {
-              "name": "200 OK — valid token",
+              "name": "200 OK \u00e2\u20ac\u201d valid token",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -493,7 +493,7 @@
               "body": "{\n  \"valid\": true,\n  \"timestamp\": \"2024-03-17T17:05:00Z\"\n}"
             },
             {
-              "name": "401 Unauthorized — expired/invalid token",
+              "name": "401 Unauthorized \u00e2\u20ac\u201d expired/invalid token",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -520,7 +520,7 @@
           ]
         },
         {
-          "name": "GET /auth/users — List All Users (REGULATOR only)",
+          "name": "GET /auth/users \u00e2\u20ac\u201d List All Users (REGULATOR only)",
           "request": {
             "auth": {
               "type": "bearer",
@@ -573,7 +573,7 @@
               "body": "[\n  {\n    \"id\": \"a1000000-0000-0000-0000-000000000001\",\n    \"username\": \"trader1\",\n    \"role\": \"TRADER\",\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"lastLoginAt\": \"2024-03-17T17:00:00Z\"\n  },\n  {\n    \"id\": \"a1000000-0000-0000-0000-000000000002\",\n    \"username\": \"regulator1\",\n    \"role\": \"REGULATOR\",\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"lastLoginAt\": \"2024-03-17T16:00:00Z\"\n  },\n  {\n    \"id\": \"a1000000-0000-0000-0000-000000000003\",\n    \"username\": \"bot-operator1\",\n    \"role\": \"BOT_OPERATOR\",\n    \"createdAt\": \"2024-01-01T00:00:00Z\",\n    \"lastLoginAt\": null\n  }\n]"
             },
             {
-              "name": "403 Forbidden — not a REGULATOR",
+              "name": "403 Forbidden \u00e2\u20ac\u201d not a REGULATOR",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -594,7 +594,7 @@
           ]
         },
         {
-          "name": "GET /auth/.well-known/jwks.json — JWKS",
+          "name": "GET /auth/.well-known/jwks.json \u00e2\u20ac\u201d JWKS",
           "request": {
             "auth": {
               "type": "noauth"
@@ -612,7 +612,7 @@
                 "jwks.json"
               ]
             },
-            "description": "Returns the JSON Web Key Set used by other services to verify JWT tokens. No authentication required. Note: because this service uses HMAC-SHA256 (symmetric), no public keys are returned — other services share the JWT_SECRET."
+            "description": "Returns the JSON Web Key Set used by other services to verify JWT tokens. No authentication required. Note: because this service uses HMAC-SHA256 (symmetric), no public keys are returned \u00e2\u20ac\u201d other services share the JWT_SECRET."
           },
           "response": [
             {
@@ -640,10 +640,10 @@
     },
     {
       "name": "02 - Orders",
-      "description": "Order submission, status, cancellation, and order book. Port 8082, routed via gateway at /orders/**.\n\nOrder lifecycle: PENDING → COMPLIANCE_CHECK → OPEN → FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED\nStop-loss lifecycle: PENDING_TRIGGER → (price trigger met) → TRIGGERED → saga → FILLED\n\nOrder sides: BUY, SELL\nOrder types:\n- MARKET: no limitPrice needed\n- LIMIT: limitPrice required\n- STOP_LOSS: triggerPrice required; held as PENDING_TRIGGER until market price ≤ triggerPrice, then executes as a market order",
+      "description": "Order submission, status, cancellation, and order book. Port 8082, routed via gateway at /orders/**.\n\nOrder lifecycle: PENDING \u00e2\u2020\u2019 COMPLIANCE_CHECK \u00e2\u2020\u2019 OPEN \u00e2\u2020\u2019 FILLED / PARTIALLY_FILLED / CANCELLED / REJECTED / FAILED\nStop-loss lifecycle: PENDING_TRIGGER \u00e2\u2020\u2019 (price trigger met) \u00e2\u2020\u2019 TRIGGERED \u00e2\u2020\u2019 saga \u00e2\u2020\u2019 FILLED\n\nOrder sides: BUY, SELL\nOrder types:\n- MARKET: no limitPrice needed\n- LIMIT: limitPrice required\n- STOP_LOSS: triggerPrice required; held as PENDING_TRIGGER until market price \u00e2\u2030\u00a4 triggerPrice, then executes as a market order",
       "item": [
         {
-          "name": "POST /orders — Submit New Order (MARKET BUY)",
+          "name": "POST /orders \u00e2\u20ac\u201d Submit New Order (MARKET BUY)",
           "event": [
             {
               "listen": "test",
@@ -685,11 +685,11 @@
                 "orders"
               ]
             },
-            "description": "Submits a new BUY or SELL order. The user identity is derived from the JWT token — no userId field is needed in the body.\n\n**MARKET order:** Omit `limitPrice`. Fills at current market price.\n**LIMIT order:** Include `limitPrice`. Fills only when market price meets the limit.\n\n**Validation:**\n- `ticker`: required, max 10 chars\n- `side`: required — BUY or SELL\n- `type`: required — MARKET or LIMIT\n- `quantity`: required, positive number\n- `limitPrice`: required and positive only for LIMIT orders\n\nThe test script automatically saves the returned `id` as the `order_id` collection variable."
+            "description": "Submits a new BUY or SELL order. The user identity is derived from the JWT token \u00e2\u20ac\u201d no userId field is needed in the body.\n\n**MARKET order:** Omit `limitPrice`. Fills at current market price.\n**LIMIT order:** Include `limitPrice`. Fills only when market price meets the limit.\n\n**Validation:**\n- `ticker`: required, max 10 chars\n- `side`: required \u00e2\u20ac\u201d BUY or SELL\n- `type`: required \u00e2\u20ac\u201d MARKET or LIMIT\n- `quantity`: required, positive number\n- `limitPrice`: required and positive only for LIMIT orders\n\nThe test script automatically saves the returned `id` as the `order_id` collection variable."
           },
           "response": [
             {
-              "name": "201 Created — MARKET BUY order",
+              "name": "201 Created \u00e2\u20ac\u201d MARKET BUY order",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -722,7 +722,7 @@
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:00Z\"\n}"
             },
             {
-              "name": "201 Created — LIMIT SELL order",
+              "name": "201 Created \u00e2\u20ac\u201d LIMIT SELL order",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -755,7 +755,7 @@
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000002\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"TSLA\",\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"limitPrice\": 250.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:00Z\"\n}"
             },
             {
-              "name": "201 Created — STOP_LOSS order",
+              "name": "201 Created \u00e2\u20ac\u201d STOP_LOSS order",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -788,7 +788,7 @@
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000003\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"triggerPrice\": 150.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING_TRIGGER\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2026-03-18T17:00:00Z\",\n  \"expiresAt\": null,\n  \"updatedAt\": \"2026-03-18T17:00:00Z\"\n}"
             },
             {
-              "name": "400 Bad Request — STOP_LOSS missing triggerPrice",
+              "name": "400 Bad Request \u00e2\u20ac\u201d STOP_LOSS missing triggerPrice",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -817,7 +817,7 @@
               "body": "{\n  \"error\": \"Bad Request\",\n  \"message\": \"Trigger price is required for STOP_LOSS orders\",\n  \"timestamp\": \"2026-03-18T17:00:00Z\",\n  \"path\": \"uri=/orders\",\n  \"service\": \"order-service\"\n}"
             },
             {
-              "name": "400 Bad Request — missing required field",
+              "name": "400 Bad Request \u00e2\u20ac\u201d missing required field",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -848,7 +848,7 @@
           ]
         },
         {
-          "name": "POST /orders — Submit Stop-Loss Order",
+          "name": "POST /orders \u00e2\u20ac\u201d Submit Stop-Loss Order",
           "event": [
             {
               "listen": "test",
@@ -897,11 +897,11 @@
                 "orders"
               ]
             },
-            "description": "Submits a stop-loss sell order. The order is held with status PENDING_TRIGGER and does not enter the matching engine immediately.\n\nThe saga runs compliance only, then parks — execution resumes automatically when market-data-service detects that the current price has fallen to or below triggerPrice.\n\nSet triggerPrice below the current market price to test triggering manually via POST /orders/internal/stop-loss/evaluate.\n\norder_id is auto-saved for use in subsequent requests."
+            "description": "Submits a stop-loss sell order. The order is held with status PENDING_TRIGGER and does not enter the matching engine immediately.\n\nThe saga runs compliance only, then parks \u00e2\u20ac\u201d execution resumes automatically when market-data-service detects that the current price has fallen to or below triggerPrice.\n\nSet triggerPrice below the current market price to test triggering manually via POST /orders/internal/stop-loss/evaluate.\n\norder_id is auto-saved for use in subsequent requests."
           },
           "response": [
             {
-              "name": "201 Created — PENDING_TRIGGER",
+              "name": "201 Created \u00e2\u20ac\u201d PENDING_TRIGGER",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -934,7 +934,7 @@
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000010\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"SELL\",\n  \"type\": \"STOP_LOSS\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"triggerPrice\": 150.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"PENDING_TRIGGER\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2026-03-24T17:00:00Z\",\n  \"expiresAt\": null,\n  \"updatedAt\": \"2026-03-24T17:00:00Z\"\n}"
             },
             {
-              "name": "400 Bad Request — missing triggerPrice",
+              "name": "400 Bad Request \u00e2\u20ac\u201d missing triggerPrice",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -965,7 +965,7 @@
           ]
         },
         {
-          "name": "GET /orders/:orderId — Get Order by ID",
+          "name": "GET /orders/:orderId \u00e2\u20ac\u201d Get Order by ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -983,7 +983,7 @@
           },
           "response": [
             {
-              "name": "200 OK — FILLED order",
+              "name": "200 OK \u00e2\u20ac\u201d FILLED order",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -1008,7 +1008,7 @@
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"AAPL\",\n  \"side\": \"BUY\",\n  \"type\": \"MARKET\",\n  \"quantity\": 10,\n  \"limitPrice\": null,\n  \"filledPrice\": 172.35,\n  \"filledQty\": 10,\n  \"status\": \"FILLED\",\n  \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:00:05Z\"\n}"
             },
             {
-              "name": "200 OK — REJECTED order",
+              "name": "200 OK \u00e2\u20ac\u201d REJECTED order",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -1048,7 +1048,7 @@
           ]
         },
         {
-          "name": "GET /orders — List My Orders (paginated)",
+          "name": "GET /orders \u00e2\u20ac\u201d List My Orders (paginated)",
           "request": {
             "method": "GET",
             "header": [],
@@ -1076,7 +1076,7 @@
                 {
                   "key": "status",
                   "value": "FILLED",
-                  "description": "Filter by order status — PENDING, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED (optional)",
+                  "description": "Filter by order status \u00e2\u20ac\u201d PENDING, OPEN, PARTIALLY_FILLED, FILLED, CANCELLED, REJECTED (optional)",
                   "disabled": true
                 },
                 {
@@ -1101,7 +1101,7 @@
           },
           "response": [
             {
-              "name": "200 OK — no filters",
+              "name": "200 OK \u00e2\u20ac\u201d no filters",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -1126,7 +1126,7 @@
               "body": "{\n  \"content\": [\n    {\n      \"id\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"ticker\": \"AAPL\",\n      \"side\": \"BUY\",\n      \"type\": \"MARKET\",\n      \"quantity\": 10,\n      \"limitPrice\": null,\n      \"filledPrice\": 172.35,\n      \"filledQty\": 10,\n      \"status\": \"FILLED\",\n      \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n      \"rejectionReason\": null,\n      \"createdAt\": \"2026-03-17T17:00:00Z\",\n      \"expiresAt\": null,\n      \"updatedAt\": \"2026-03-17T17:00:05Z\"\n    }\n  ],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 25,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 1,\n  \"totalPages\": 1,\n  \"last\": true,\n  \"first\": true\n}"
             },
             {
-              "name": "200 OK — filtered by status + ticker",
+              "name": "200 OK \u00e2\u20ac\u201d filtered by status + ticker",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -1151,7 +1151,7 @@
               "body": "{\n  \"content\": [\n    {\n      \"id\": \"b2000000-0000-0000-0000-000000000001\",\n      \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n      \"ticker\": \"AAPL\",\n      \"side\": \"BUY\",\n      \"type\": \"MARKET\",\n      \"quantity\": 10,\n      \"limitPrice\": null,\n      \"filledPrice\": 172.35,\n      \"filledQty\": 10,\n      \"status\": \"FILLED\",\n      \"sagaId\": \"c3000000-0000-0000-0000-000000000001\",\n      \"rejectionReason\": null,\n      \"createdAt\": \"2026-03-17T17:00:00Z\",\n      \"expiresAt\": null,\n      \"updatedAt\": \"2026-03-17T17:00:05Z\"\n    }\n  ],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 25,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 1,\n  \"totalPages\": 1,\n  \"last\": true,\n  \"first\": true\n}"
             },
             {
-              "name": "200 OK — filtered by date range",
+              "name": "200 OK \u00e2\u20ac\u201d filtered by date range",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -1176,7 +1176,7 @@
               "body": "{\n  \"content\": [],\n  \"pageable\": {\n    \"pageNumber\": 0,\n    \"pageSize\": 25,\n    \"sort\": { \"sorted\": true, \"unsorted\": false }\n  },\n  \"totalElements\": 0,\n  \"totalPages\": 0,\n  \"last\": true,\n  \"first\": true\n}"
             },
             {
-              "name": "400 Bad Request — invalid date format",
+              "name": "400 Bad Request \u00e2\u20ac\u201d invalid date format",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -1201,7 +1201,7 @@
               "body": "{\n  \"error\": \"Bad Request\",\n  \"message\": \"Invalid value for 'from'. Expected format: YYYY-MM-DD (e.g. 2026-03-17)\",\n  \"timestamp\": \"2026-03-18T02:43:14.855050655Z\",\n  \"path\": \"uri=/orders\",\n  \"service\": \"order-service\"\n}"
             },
             {
-              "name": "400 Bad Request — invalid status value",
+              "name": "400 Bad Request \u00e2\u20ac\u201d invalid status value",
               "originalRequest": {
                 "method": "GET",
                 "header": [
@@ -1228,7 +1228,7 @@
           ]
         },
         {
-          "name": "DELETE /orders/:orderId — Cancel Order",
+          "name": "DELETE /orders/:orderId \u00e2\u20ac\u201d Cancel Order",
           "request": {
             "method": "DELETE",
             "header": [],
@@ -1246,7 +1246,7 @@
           },
           "response": [
             {
-              "name": "200 OK — cancelled",
+              "name": "200 OK \u00e2\u20ac\u201d cancelled",
               "originalRequest": {
                 "method": "DELETE",
                 "header": [
@@ -1271,7 +1271,7 @@
               "body": "{\n  \"id\": \"b2000000-0000-0000-0000-000000000002\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"ticker\": \"TSLA\",\n  \"side\": \"SELL\",\n  \"type\": \"LIMIT\",\n  \"quantity\": 5,\n  \"limitPrice\": 250.00,\n  \"filledPrice\": null,\n  \"filledQty\": null,\n  \"status\": \"CANCELLED\",\n  \"sagaId\": null,\n  \"rejectionReason\": null,\n  \"createdAt\": \"2024-03-17T17:00:00Z\",\n  \"expiresAt\": \"2024-03-18T17:00:00Z\",\n  \"updatedAt\": \"2024-03-17T17:05:00Z\"\n}"
             },
             {
-              "name": "409 Conflict — already filled",
+              "name": "409 Conflict \u00e2\u20ac\u201d already filled",
               "originalRequest": {
                 "method": "DELETE",
                 "url": {
@@ -1292,7 +1292,7 @@
           ]
         },
         {
-          "name": "POST /orders/:orderId/system-cancel — System Cancel (saga compensation)",
+          "name": "POST /orders/:orderId/system-cancel \u00e2\u20ac\u201d System Cancel (saga compensation)",
           "request": {
             "method": "POST",
             "header": [
@@ -1325,11 +1325,11 @@
                 }
               }
             },
-            "description": "Internal endpoint called by saga compensation (EQ-113b). Terminal state rules:\n- PENDING / OPEN / PENDING_TRIGGER / TRIGGERED / COMPLIANCE_CHECK → 200 CANCELLED\n- CANCELLED / REJECTED / FAILED → 200 no-op (idempotent)\n- FILLED / PARTIALLY_FILLED → 409 ORDER_IN_TERMINAL_STATE"
+            "description": "Internal endpoint called by saga compensation (EQ-113b). Terminal state rules:\n- PENDING / OPEN / PENDING_TRIGGER / TRIGGERED / COMPLIANCE_CHECK \u00e2\u2020\u2019 200 CANCELLED\n- CANCELLED / REJECTED / FAILED \u00e2\u2020\u2019 200 no-op (idempotent)\n- FILLED / PARTIALLY_FILLED \u00e2\u2020\u2019 409 ORDER_IN_TERMINAL_STATE"
           }
         },
         {
-          "name": "POST /orders/:orderId/match — Trigger Matching (internal/saga)",
+          "name": "POST /orders/:orderId/match \u00e2\u20ac\u201d Trigger Matching (internal/saga)",
           "request": {
             "method": "POST",
             "header": [],
@@ -1344,11 +1344,11 @@
                 "match"
               ]
             },
-            "description": "Internal endpoint used by the Saga Orchestrator to trigger order matching. Under normal operation you do not need to call this manually — the saga calls it automatically after compliance passes.\n\nCalling this directly is useful for debugging a stalled saga."
+            "description": "Internal endpoint used by the Saga Orchestrator to trigger order matching. Under normal operation you do not need to call this manually \u00e2\u20ac\u201d the saga calls it automatically after compliance passes.\n\nCalling this directly is useful for debugging a stalled saga."
           },
           "response": [
             {
-              "name": "200 OK — matched/filled",
+              "name": "200 OK \u00e2\u20ac\u201d matched/filled",
               "originalRequest": {
                 "method": "POST",
                 "url": {
@@ -1369,7 +1369,7 @@
           ]
         },
         {
-          "name": "POST /orders/internal/stop-loss/evaluate — Manually Evaluate Stop-Loss Triggers",
+          "name": "POST /orders/internal/stop-loss/evaluate \u00e2\u20ac\u201d Manually Evaluate Stop-Loss Triggers",
           "request": {
             "method": "POST",
             "header": [],
@@ -1393,15 +1393,15 @@
                 {
                   "key": "currentPrice",
                   "value": "100.00",
-                  "description": "Simulated current price — set this below the triggerPrice of the order you want to fire"
+                  "description": "Simulated current price \u00e2\u20ac\u201d set this below the triggerPrice of the order you want to fire"
                 }
               ]
             },
-            "description": "Internal endpoint that evaluates all PENDING_TRIGGER stop-loss orders for the given ticker against a supplied price. Any order whose triggerPrice ≥ currentPrice is marked TRIGGERED and a Kafka event is published to kick off saga execution.\n\nNo authentication required — internal use only.\n\nUseful for testing stop-loss execution without waiting for a real price movement. Set currentPrice to a value below your order's triggerPrice (e.g. 1.00) to fire it immediately."
+            "description": "Internal endpoint that evaluates all PENDING_TRIGGER stop-loss orders for the given ticker against a supplied price. Any order whose triggerPrice \u00e2\u2030\u00a5 currentPrice is marked TRIGGERED and a Kafka event is published to kick off saga execution.\n\nNo authentication required \u00e2\u20ac\u201d internal use only.\n\nUseful for testing stop-loss execution without waiting for a real price movement. Set currentPrice to a value below your order's triggerPrice (e.g. 1.00) to fire it immediately."
           },
           "response": [
             {
-              "name": "200 OK — triggers evaluated",
+              "name": "200 OK \u00e2\u20ac\u201d triggers evaluated",
               "originalRequest": {
                 "method": "POST",
                 "url": {
@@ -1417,7 +1417,7 @@
           ]
         },
         {
-          "name": "GET /orders/book/:ticker — Order Book Snapshot",
+          "name": "GET /orders/book/:ticker \u00e2\u20ac\u201d Order Book Snapshot",
           "request": {
             "method": "GET",
             "header": [],
@@ -1463,7 +1463,7 @@
       "description": "Real-time simulated market price data. Port 8083, routed via gateway at /market/**.",
       "item": [
         {
-          "name": "GET /market/prices — Get All Ticker Prices",
+          "name": "GET /market/prices \u00e2\u20ac\u201d Get All Ticker Prices",
           "request": {
             "method": "GET",
             "header": [],
@@ -1502,7 +1502,7 @@
           ]
         },
         {
-          "name": "GET /market/prices/:ticker — Get Price for Ticker",
+          "name": "GET /market/prices/:ticker \u00e2\u20ac\u201d Get Price for Ticker",
           "request": {
             "method": "GET",
             "header": [],
@@ -1542,7 +1542,7 @@
           ]
         },
         {
-          "name": "POST /market/prices/:ticker/tick — Simulate Price Tick",
+          "name": "POST /market/prices/:ticker/tick \u00e2\u20ac\u201d Simulate Price Tick",
           "request": {
             "method": "POST",
             "header": [],
@@ -1562,7 +1562,7 @@
           },
           "response": [
             {
-              "name": "200 OK — updated price",
+              "name": "200 OK \u00e2\u20ac\u201d updated price",
               "originalRequest": {
                 "method": "POST",
                 "url": {
@@ -1583,7 +1583,7 @@
           ]
         },
         {
-          "name": "GET /market/status — Market Data Service Status",
+          "name": "GET /market/status \u00e2\u20ac\u201d Market Data Service Status",
           "request": {
             "method": "GET",
             "header": [],
@@ -1601,7 +1601,7 @@
           },
           "response": [
             {
-              "name": "200 OK — no active scenario",
+              "name": "200 OK \u00e2\u20ac\u201d no active scenario",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -1620,7 +1620,7 @@
               "body": "{\n  \"activeScenario\": null,\n  \"scenarioActive\": false,\n  \"triggeredBy\": null,\n  \"startedAt\": null\n}"
             },
             {
-              "name": "200 OK — scenario running",
+              "name": "200 OK \u00e2\u20ac\u201d scenario running",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -1644,10 +1644,10 @@
     },
     {
       "name": "04 - Market Admin (Scenarios)",
-      "description": "Market scenario control. Port 8083, routed via gateway at /admin/market/**.\n\nAvailable scenarios:\n- `flash_crash` — sudden sharp price drop across all tickers\n- `bull_run` — sustained upward price movement\n- `bear_market` — sustained downward pressure\n- `high_volatility` — large random swings in both directions\n- `sector_rotation` — some sectors rise while others fall\n- `liquidity_crisis` — thin order book, wide spreads",
+      "description": "Market scenario control. Port 8083, routed via gateway at /admin/market/**.\n\nAvailable scenarios:\n- `flash_crash` \u00e2\u20ac\u201d sudden sharp price drop across all tickers\n- `bull_run` \u00e2\u20ac\u201d sustained upward price movement\n- `bear_market` \u00e2\u20ac\u201d sustained downward pressure\n- `high_volatility` \u00e2\u20ac\u201d large random swings in both directions\n- `sector_rotation` \u00e2\u20ac\u201d some sectors rise while others fall\n- `liquidity_crisis` \u00e2\u20ac\u201d thin order book, wide spreads",
       "item": [
         {
-          "name": "POST /admin/market/scenarios/:scenarioName/start — Start Scenario",
+          "name": "POST /admin/market/scenarios/:scenarioName/start \u00e2\u20ac\u201d Start Scenario",
           "request": {
             "method": "POST",
             "header": [],
@@ -1668,7 +1668,7 @@
           },
           "response": [
             {
-              "name": "200 OK — flash_crash started",
+              "name": "200 OK \u00e2\u20ac\u201d flash_crash started",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -1695,7 +1695,7 @@
           ]
         },
         {
-          "name": "POST /admin/market/scenarios/stop — Stop Active Scenario",
+          "name": "POST /admin/market/scenarios/stop \u00e2\u20ac\u201d Stop Active Scenario",
           "request": {
             "method": "POST",
             "header": [],
@@ -1736,7 +1736,7 @@
           ]
         },
         {
-          "name": "GET /admin/market/scenarios/status — Scenario Engine Status",
+          "name": "GET /admin/market/scenarios/status \u00e2\u20ac\u201d Scenario Engine Status",
           "request": {
             "method": "GET",
             "header": [],
@@ -1780,10 +1780,10 @@
     },
     {
       "name": "05 - Compliance",
-      "description": "Compliance checks for order validation. Port 8084, routed via gateway at /compliance/**.\n\nChecks performed:\n1. **Wash-sale check** — detects if the user recently sold the same ticker they are now buying (within 30 days)\n2. **Insufficient-funds check** — verifies `estimatedValue` ≤ `availableCash`",
+      "description": "Compliance checks for order validation. Port 8084, routed via gateway at /compliance/**.\n\nChecks performed:\n1. **Wash-sale check** \u00e2\u20ac\u201d detects if the user recently sold the same ticker they are now buying (within 30 days)\n2. **Insufficient-funds check** \u00e2\u20ac\u201d verifies `estimatedValue` \u00e2\u2030\u00a4 `availableCash`",
       "item": [
         {
-          "name": "POST /compliance/check — Run Compliance Check",
+          "name": "POST /compliance/check \u00e2\u20ac\u201d Run Compliance Check",
           "request": {
             "method": "POST",
             "header": [
@@ -1811,11 +1811,11 @@
                 "check"
               ]
             },
-            "description": "Runs compliance checks on an order before it is matched. Normally called by the Saga Orchestrator automatically, but can be called directly for testing.\n\n**Validation:**\n- `orderId`: required UUID\n- `userId`: required UUID\n- `ticker`: required, non-blank\n- `side`: required — BUY or SELL\n- `quantity`: required, positive\n- `estimatedValue`: positive (used for insufficient-funds check)\n- `availableCash`: positive (the user's current available cash)"
+            "description": "Runs compliance checks on an order before it is matched. Normally called by the Saga Orchestrator automatically, but can be called directly for testing.\n\n**Validation:**\n- `orderId`: required UUID\n- `userId`: required UUID\n- `ticker`: required, non-blank\n- `side`: required \u00e2\u20ac\u201d BUY or SELL\n- `quantity`: required, positive\n- `estimatedValue`: positive (used for insufficient-funds check)\n- `availableCash`: positive (the user's current available cash)"
           },
           "response": [
             {
-              "name": "200 OK — approved",
+              "name": "200 OK \u00e2\u20ac\u201d approved",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -1844,7 +1844,7 @@
               "body": "{\n  \"checkId\": \"d4000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"approved\": true,\n  \"violations\": [],\n  \"message\": \"All compliance checks passed\",\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
             },
             {
-              "name": "200 OK — rejected (insufficient funds)",
+              "name": "200 OK \u00e2\u20ac\u201d rejected (insufficient funds)",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -1873,7 +1873,7 @@
               "body": "{\n  \"checkId\": \"d4000000-0000-0000-0000-000000000099\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n  \"approved\": false,\n  \"violations\": [\n    {\n      \"type\": \"INSUFFICIENT_FUNDS\",\n      \"description\": \"Estimated order value $172,350,000.00 exceeds available cash $100,000.00\"\n    }\n  ],\n  \"message\": \"Compliance check failed: 1 violation(s) found\",\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
             },
             {
-              "name": "200 OK — rejected (wash-sale)",
+              "name": "200 OK \u00e2\u20ac\u201d rejected (wash-sale)",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -1904,7 +1904,134 @@
           ]
         },
         {
-          "name": "GET /compliance/history/:userId — Compliance History",
+          "name": "GET /compliance/results/order/:orderId \u2014 Get Compliance Result by Order",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{botoperator1_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/compliance/results/order/{{order_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance",
+                "results",
+                "order",
+                "{{order_id}}"
+              ]
+            },
+            "description": "Returns the compliance check result for a specific order \u2014 overall result (APPROVED/REJECTED), all violations with their type and failure reason, and the timestamp the check ran.\n\nUsed by the compliance breach agent to retrieve violation details for REJECTED orders."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2014 REJECTED (INSUFFICIENT_FUNDS)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{botoperator1_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/compliance/results/order/b2000000-0000-0000-0000-000000000099"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000099\",\n  \"result\": \"REJECTED\",\n  \"violations\": [\n    {\n      \"code\": \"INSUFFICIENT_FUNDS\",\n      \"description\": \"Insufficient funds: Required $172350000.00, Available $100000.00, Shortfall $172250000.00\",\n      \"severity\": \"HARD_BLOCK\"\n    }\n  ],\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
+            },
+            {
+              "name": "200 OK \u2014 REJECTED (WASH_SALE)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{botoperator1_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/compliance/results/order/b2000000-0000-0000-0000-000000000098"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000098\",\n  \"result\": \"REJECTED\",\n  \"violations\": [\n    {\n      \"code\": \"WASH_SALE\",\n      \"description\": \"Wash-sale rule violation: AAPL was sold at a loss on 2024-02-20. Repurchase within 30 days is prohibited.\",\n      \"severity\": \"HARD_BLOCK\"\n    }\n  ],\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
+            },
+            {
+              "name": "200 OK \u2014 APPROVED (no violations)",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{botoperator1_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/compliance/results/order/b2000000-0000-0000-0000-000000000001"
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"result\": \"APPROVED\",\n  \"violations\": [],\n  \"checkedAt\": \"2024-03-17T17:00:01Z\"\n}"
+            },
+            {
+              "name": "404 Not Found \u2014 no compliance result for this order",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{botoperator1_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/compliance/results/order/00000000-0000-0000-0000-000000000000"
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"Not Found\",\n  \"message\": \"No compliance result found for order 00000000-0000-0000-0000-000000000000\",\n  \"timestamp\": \"2024-03-17T17:00:01Z\",\n  \"path\": \"uri=/compliance/results/order/00000000-0000-0000-0000-000000000000\",\n  \"service\": \"compliance-service\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /compliance/history/:userId \u00e2\u20ac\u201d Compliance History",
           "request": {
             "method": "GET",
             "header": [],
@@ -1950,7 +2077,7 @@
       "description": "Account balances, fund holds, debits, positions, and transaction history. Port 8085, routed via gateway at /ledger/**.\n\nTransaction types: HOLD, RELEASE, DEBIT, CREDIT, SETTLEMENT",
       "item": [
         {
-          "name": "GET /ledger/accounts/:userId — Get Account",
+          "name": "GET /ledger/accounts/:userId \u00e2\u20ac\u201d Get Account",
           "request": {
             "method": "GET",
             "header": [],
@@ -1990,7 +2117,7 @@
           ]
         },
         {
-          "name": "POST /ledger/hold — Place Hold on Funds",
+          "name": "POST /ledger/hold \u00e2\u20ac\u201d Place Hold on Funds",
           "request": {
             "method": "POST",
             "header": [
@@ -2053,7 +2180,7 @@
           ]
         },
         {
-          "name": "POST /ledger/release — Release Hold on Funds",
+          "name": "POST /ledger/release \u00e2\u20ac\u201d Release Hold on Funds",
           "request": {
             "method": "POST",
             "header": [
@@ -2064,7 +2191,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000002\",\n  \"amount\": 1243.50,\n  \"description\": \"Release hold — order cancelled\"\n}",
+              "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000002\",\n  \"amount\": 1243.50,\n  \"description\": \"Release hold \u00e2\u20ac\u201d order cancelled\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -2096,7 +2223,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000002\",\n  \"amount\": 1243.50,\n  \"description\": \"Release hold — order cancelled\"\n}"
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000002\",\n  \"amount\": 1243.50,\n  \"description\": \"Release hold \u00e2\u20ac\u201d order cancelled\"\n}"
                 },
                 "url": {
                   "raw": "{{base_url}}/ledger/release"
@@ -2116,7 +2243,7 @@
           ]
         },
         {
-          "name": "POST /ledger/debit — Debit Funds (on Fill)",
+          "name": "POST /ledger/debit \u00e2\u20ac\u201d Debit Funds (on Fill)",
           "request": {
             "method": "POST",
             "header": [
@@ -2179,7 +2306,7 @@
           ]
         },
         {
-          "name": "GET /ledger/history/:userId — Transaction History",
+          "name": "GET /ledger/history/:userId \u00e2\u20ac\u201d Transaction History",
           "request": {
             "method": "GET",
             "header": [],
@@ -2219,7 +2346,7 @@
           ]
         },
         {
-          "name": "GET /ledger/positions/:userId — Get Positions",
+          "name": "GET /ledger/positions/:userId \u00e2\u20ac\u201d Get Positions",
           "request": {
             "method": "GET",
             "header": [],
@@ -2259,10 +2386,10 @@
           ]
         },
         {
-          "name": "EQ-113b — Release Idempotency",
+          "name": "EQ-113b \u00e2\u20ac\u201d Release Idempotency",
           "item": [
             {
-              "name": "Step 1 — First release (should deduct hold)",
+              "name": "Step 1 \u00e2\u20ac\u201d First release (should deduct hold)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2283,14 +2410,14 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b1000000-0000-0000-0000-000000000001\",\n  \"amount\": 1500,\n  \"description\": \"Release hold — order cancelled\"\n}",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b1000000-0000-0000-0000-000000000001\",\n  \"amount\": 1500,\n  \"description\": \"Release hold \u00e2\u20ac\u201d order cancelled\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
                     }
                   }
                 },
-                "description": "First call — hold exists, so cashOnHold decreases and availableCash increases. A RELEASE transaction row is written to ledger_transactions."
+                "description": "First call \u00e2\u20ac\u201d hold exists, so cashOnHold decreases and availableCash increases. A RELEASE transaction row is written to ledger_transactions."
               },
               "event": [
                 {
@@ -2309,7 +2436,7 @@
               ]
             },
             {
-              "name": "Step 2 — Duplicate release (should be no-op, same 200)",
+              "name": "Step 2 \u00e2\u20ac\u201d Duplicate release (should be no-op, same 200)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2330,7 +2457,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b1000000-0000-0000-0000-000000000001\",\n  \"amount\": 1500,\n  \"description\": \"Release hold — order cancelled\"\n}",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b1000000-0000-0000-0000-000000000001\",\n  \"amount\": 1500,\n  \"description\": \"Release hold \u00e2\u20ac\u201d order cancelled\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -2345,7 +2472,7 @@
                   "script": {
                     "type": "text/javascript",
                     "exec": [
-                      "pm.test(\"200 OK — no error on duplicate\", () => pm.response.to.have.status(200));",
+                      "pm.test(\"200 OK \u00e2\u20ac\u201d no error on duplicate\", () => pm.response.to.have.status(200));",
                       "var j = pm.response.json();",
                       "var first = pm.collectionVariables.get(\"release_available_cash_after_first\");",
                       "pm.test(\"availableCash unchanged (no double-release)\", () => pm.expect(j.availableCash).to.eql(parseFloat(first)));",
@@ -2356,7 +2483,7 @@
               ]
             },
             {
-              "name": "Step 3 — Null orderId release (always executes, no idempotency check)",
+              "name": "Step 3 \u00e2\u20ac\u201d Null orderId release (always executes, no idempotency check)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -2377,14 +2504,14 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"amount\": 500,\n  \"description\": \"Manual operator adjustment — no orderId\"\n}",
+                  "raw": "{\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"amount\": 500,\n  \"description\": \"Manual operator adjustment \u00e2\u20ac\u201d no orderId\"\n}",
                   "options": {
                     "raw": {
                       "language": "json"
                     }
                   }
                 },
-                "description": "No orderId in the body — the idempotency guard is skipped entirely. Release always executes. Used for manual operator adjustments that are not tied to any order."
+                "description": "No orderId in the body \u00e2\u20ac\u201d the idempotency guard is skipped entirely. Release always executes. Used for manual operator adjustments that are not tied to any order."
               },
               "event": [
                 {
@@ -2407,10 +2534,10 @@
     },
     {
       "name": "07 - Settlement",
-      "description": "T+1 settlement processing. Port 8086, routed via gateway at /settlement/**.\n\nSettlement statuses: PENDING_SETTLEMENT → SETTLED / FAILED\n\nSettlement runs automatically on a schedule (T+1). Use the admin endpoint to run manually.",
+      "description": "T+1 settlement processing. Port 8086, routed via gateway at /settlement/**.\n\nSettlement statuses: PENDING_SETTLEMENT \u00e2\u2020\u2019 SETTLED / FAILED\n\nSettlement runs automatically on a schedule (T+1). Use the admin endpoint to run manually.",
       "item": [
         {
-          "name": "GET /settlement/pending — Get Pending Settlements",
+          "name": "GET /settlement/pending \u00e2\u20ac\u201d Get Pending Settlements",
           "request": {
             "method": "GET",
             "header": [],
@@ -2449,7 +2576,7 @@
           ]
         },
         {
-          "name": "GET /settlement/history/:userId — Settlement History",
+          "name": "GET /settlement/history/:userId \u00e2\u20ac\u201d Settlement History",
           "request": {
             "method": "GET",
             "header": [],
@@ -2489,7 +2616,7 @@
           ]
         },
         {
-          "name": "POST /settlement/create — Create Settlement Record (saga)",
+          "name": "POST /settlement/create \u00e2\u20ac\u201d Create Settlement Record (saga)",
           "request": {
             "method": "POST",
             "header": [
@@ -2552,7 +2679,7 @@
           ]
         },
         {
-          "name": "POST /settlement/admin/run — Trigger Settlement Run (admin)",
+          "name": "POST /settlement/admin/run \u00e2\u20ac\u201d Trigger Settlement Run (admin)",
           "request": {
             "method": "POST",
             "header": [],
@@ -2567,7 +2694,7 @@
                 "run"
               ]
             },
-            "description": "Manually triggers the settlement batch process. Processes all records where `settlementDate` ≤ today and status is PENDING_SETTLEMENT. Returns count of records settled."
+            "description": "Manually triggers the settlement batch process. Processes all records where `settlementDate` \u00e2\u2030\u00a4 today and status is PENDING_SETTLEMENT. Returns count of records settled."
           },
           "response": [
             {
@@ -2598,7 +2725,7 @@
       "description": "Append-only event audit trail. Port 8087, routed via gateway at /audit/**.\n\nAll system events (order submitted, compliance checked, saga steps, fills, settlements) are written here as immutable records via Kafka consumers.",
       "item": [
         {
-          "name": "GET /audit/events — All Events (paginated)",
+          "name": "GET /audit/events \u00e2\u20ac\u201d All Events (paginated)",
           "request": {
             "method": "GET",
             "header": [],
@@ -2649,7 +2776,7 @@
           ]
         },
         {
-          "name": "GET /audit/events/order/:orderId — Audit Trail for Order",
+          "name": "GET /audit/events/order/:orderId \u00e2\u20ac\u201d Audit Trail for Order",
           "request": {
             "method": "GET",
             "header": [],
@@ -2669,7 +2796,7 @@
           },
           "response": [
             {
-              "name": "200 OK — full order lifecycle",
+              "name": "200 OK \u00e2\u20ac\u201d full order lifecycle",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -2690,7 +2817,7 @@
           ]
         },
         {
-          "name": "GET /audit/events/user/:userId — Events for User (paginated)",
+          "name": "GET /audit/events/user/:userId \u00e2\u20ac\u201d Events for User (paginated)",
           "request": {
             "method": "GET",
             "header": [],
@@ -2741,7 +2868,7 @@
           ]
         },
         {
-          "name": "GET /audit/events/type/:eventType — Events by Type (paginated)",
+          "name": "GET /audit/events/type/:eventType \u00e2\u20ac\u201d Events by Type (paginated)",
           "request": {
             "method": "GET",
             "header": [],
@@ -2792,7 +2919,7 @@
           ]
         },
         {
-          "name": "GET /audit/events/range — Events by Time Range (paginated)",
+          "name": "GET /audit/events/range \u00e2\u20ac\u201d Events by Time Range (paginated)",
           "request": {
             "method": "GET",
             "header": [],
@@ -2855,10 +2982,10 @@
     },
     {
       "name": "09 - Saga Orchestrator",
-      "description": "Distributed saga orchestration for order workflows. Port 8088, routed via gateway at /saga/**.\n\nSaga statuses: STARTED → COMPLETED / COMPENSATING → FAILED\n\nA saga is automatically created for every submitted order and coordinates the steps: compliance → hold → match → debit → settlement.",
+      "description": "Distributed saga orchestration for order workflows. Port 8088, routed via gateway at /saga/**.\n\nSaga statuses: STARTED \u00e2\u2020\u2019 COMPLETED / COMPENSATING \u00e2\u2020\u2019 FAILED\n\nA saga is automatically created for every submitted order and coordinates the steps: compliance \u00e2\u2020\u2019 hold \u00e2\u2020\u2019 match \u00e2\u2020\u2019 debit \u00e2\u2020\u2019 settlement.",
       "item": [
         {
-          "name": "GET /saga/active — Get Active Sagas",
+          "name": "GET /saga/active \u00e2\u20ac\u201d Get Active Sagas",
           "request": {
             "method": "GET",
             "header": [],
@@ -2897,7 +3024,7 @@
           ]
         },
         {
-          "name": "GET /saga/:sagaId — Get Saga by ID",
+          "name": "GET /saga/:sagaId \u00e2\u20ac\u201d Get Saga by ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -2915,7 +3042,7 @@
           },
           "response": [
             {
-              "name": "200 OK — completed saga",
+              "name": "200 OK \u00e2\u20ac\u201d completed saga",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -2934,7 +3061,7 @@
               "body": "{\n  \"id\": \"c3000000-0000-0000-0000-000000000001\",\n  \"orderId\": \"b2000000-0000-0000-0000-000000000001\",\n  \"userId\": \"a1000000-0000-0000-0000-000000000001\",\n  \"status\": \"COMPLETED\",\n  \"currentStep\": 5,\n  \"failureReason\": null,\n  \"startedAt\": \"2024-03-17T17:00:00Z\",\n  \"completedAt\": \"2024-03-17T17:00:05Z\",\n  \"steps\": [\n    { \"stepNumber\": 1, \"stepName\": \"COMPLIANCE_CHECK\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:01Z\" },\n    { \"stepNumber\": 2, \"stepName\": \"HOLD_FUNDS\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:02Z\" },\n    { \"stepNumber\": 3, \"stepName\": \"MATCH_ORDER\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:03Z\" },\n    { \"stepNumber\": 4, \"stepName\": \"DEBIT_FUNDS\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:04Z\" },\n    { \"stepNumber\": 5, \"stepName\": \"CREATE_SETTLEMENT\", \"status\": \"COMPLETED\", \"executedAt\": \"2024-03-17T17:00:05Z\" }\n  ]\n}"
             },
             {
-              "name": "200 OK — failed saga (with compensation)",
+              "name": "200 OK \u00e2\u20ac\u201d failed saga (with compensation)",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -2955,7 +3082,7 @@
           ]
         },
         {
-          "name": "GET /saga/order/:orderId — Get Saga by Order ID",
+          "name": "GET /saga/order/:orderId \u00e2\u20ac\u201d Get Saga by Order ID",
           "request": {
             "method": "GET",
             "header": [],
@@ -2995,7 +3122,7 @@
           ]
         },
         {
-          "name": "GET /saga/status/:status — Get Sagas by Status",
+          "name": "GET /saga/status/:status \u00e2\u20ac\u201d Get Sagas by Status",
           "request": {
             "method": "GET",
             "header": [],
@@ -3014,7 +3141,7 @@
           },
           "response": [
             {
-              "name": "200 OK — COMPLETED sagas",
+              "name": "200 OK \u00e2\u20ac\u201d COMPLETED sagas",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -3038,10 +3165,10 @@
     },
     {
       "name": "10 - Chaos Engineering (Surge Simulator)",
-      "description": "Chaos injection for resilience testing. Port 8089, routed via gateway at /admin/chaos/**.\n\n**Modes:**\n- `NETWORK_LATENCY` — adds artificial delay to every request processed by the service (latencyMs: 0–30000)\n- `DB_FAILURE` — randomly fails database operations at the specified rate (failureRatePercent: 0–100)\n- `BOTH` — applies both effects simultaneously\n\n**Important:** Only one chaos session can be active at a time.",
+      "description": "Chaos injection for resilience testing. Port 8089, routed via gateway at /admin/chaos/**.\n\n**Modes:**\n- `NETWORK_LATENCY` \u00e2\u20ac\u201d adds artificial delay to every request processed by the service (latencyMs: 0\u00e2\u20ac\u201c30000)\n- `DB_FAILURE` \u00e2\u20ac\u201d randomly fails database operations at the specified rate (failureRatePercent: 0\u00e2\u20ac\u201c100)\n- `BOTH` \u00e2\u20ac\u201d applies both effects simultaneously\n\n**Important:** Only one chaos session can be active at a time.",
       "item": [
         {
-          "name": "POST /admin/chaos/start — Start Chaos Injection",
+          "name": "POST /admin/chaos/start \u00e2\u20ac\u201d Start Chaos Injection",
           "request": {
             "method": "POST",
             "header": [
@@ -3070,11 +3197,11 @@
                 "start"
               ]
             },
-            "description": "Starts a chaos injection session.\n\n**Validation:**\n- `mode`: required — NETWORK_LATENCY, DB_FAILURE, or BOTH\n- `latencyMs`: 0–30000 (milliseconds). Relevant for NETWORK_LATENCY and BOTH modes.\n- `failureRatePercent`: 0–100. Relevant for DB_FAILURE and BOTH modes.\n- `triggeredBy`: optional, who triggered this session (for audit purposes)"
+            "description": "Starts a chaos injection session.\n\n**Validation:**\n- `mode`: required \u00e2\u20ac\u201d NETWORK_LATENCY, DB_FAILURE, or BOTH\n- `latencyMs`: 0\u00e2\u20ac\u201c30000 (milliseconds). Relevant for NETWORK_LATENCY and BOTH modes.\n- `failureRatePercent`: 0\u00e2\u20ac\u201c100. Relevant for DB_FAILURE and BOTH modes.\n- `triggeredBy`: optional, who triggered this session (for audit purposes)"
           },
           "response": [
             {
-              "name": "200 OK — NETWORK_LATENCY started",
+              "name": "200 OK \u00e2\u20ac\u201d NETWORK_LATENCY started",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -3103,7 +3230,7 @@
               "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000001\",\n  \"active\": true,\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
             },
             {
-              "name": "200 OK — DB_FAILURE at 30%",
+              "name": "200 OK \u00e2\u20ac\u201d DB_FAILURE at 30%",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -3132,7 +3259,7 @@
               "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000002\",\n  \"active\": true,\n  \"mode\": \"DB_FAILURE\",\n  \"latencyMs\": 0,\n  \"failureRatePercent\": 30,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
             },
             {
-              "name": "200 OK — BOTH modes",
+              "name": "200 OK \u00e2\u20ac\u201d BOTH modes",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -3163,7 +3290,7 @@
           ]
         },
         {
-          "name": "POST /admin/chaos/stop — Stop Chaos Session",
+          "name": "POST /admin/chaos/stop \u00e2\u20ac\u201d Stop Chaos Session",
           "request": {
             "method": "POST",
             "header": [],
@@ -3182,7 +3309,7 @@
           },
           "response": [
             {
-              "name": "200 OK — stopped",
+              "name": "200 OK \u00e2\u20ac\u201d stopped",
               "originalRequest": {
                 "method": "POST",
                 "url": {
@@ -3201,7 +3328,7 @@
               "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000001\",\n  \"active\": false,\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
             },
             {
-              "name": "200 OK — no active session",
+              "name": "200 OK \u00e2\u20ac\u201d no active session",
               "originalRequest": {
                 "method": "POST",
                 "url": {
@@ -3222,7 +3349,7 @@
           ]
         },
         {
-          "name": "GET /admin/chaos/status — Chaos Session Status",
+          "name": "GET /admin/chaos/status \u00e2\u20ac\u201d Chaos Session Status",
           "request": {
             "method": "GET",
             "header": [],
@@ -3241,7 +3368,7 @@
           },
           "response": [
             {
-              "name": "200 OK — active session",
+              "name": "200 OK \u00e2\u20ac\u201d active session",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -3260,7 +3387,7 @@
               "body": "{\n  \"sessionId\": \"i9000000-0000-0000-0000-000000000001\",\n  \"active\": true,\n  \"mode\": \"NETWORK_LATENCY\",\n  \"latencyMs\": 2000,\n  \"failureRatePercent\": 0,\n  \"startedAt\": \"2024-03-17T17:30:00Z\",\n  \"triggeredBy\": \"regulator1\"\n}"
             },
             {
-              "name": "200 OK — no active session",
+              "name": "200 OK \u00e2\u20ac\u201d no active session",
               "originalRequest": {
                 "method": "GET",
                 "url": {
@@ -3284,14 +3411,14 @@
     },
     {
       "name": "11 - Workflows",
-      "description": "Pre-built multi-step flows. Run 00 - Setup & Auth first. Each flow is self-contained — variables auto-propagate between steps via test scripts.",
+      "description": "Pre-built multi-step flows. Run 00 - Setup & Auth first. Each flow is self-contained \u00e2\u20ac\u201d variables auto-propagate between steps via test scripts.",
       "item": [
         {
-          "name": "Flow A — Single User Trade Lifecycle (trader1)",
+          "name": "Flow A \u00e2\u20ac\u201d Single User Trade Lifecycle (trader1)",
           "description": "Complete BUY order from price check through to settlement. Run top-to-bottom. order_id and saga_id are captured automatically.",
           "item": [
             {
-              "name": "A1 — Check AAPL price",
+              "name": "A1 \u00e2\u20ac\u201d Check AAPL price",
               "request": {
                 "auth": {
                   "type": "noauth"
@@ -3309,12 +3436,12 @@
                     "AAPL"
                   ]
                 },
-                "description": "No auth needed. Note the currentPrice — the market BUY in A2 will fill near this value."
+                "description": "No auth needed. Note the currentPrice \u00e2\u20ac\u201d the market BUY in A2 will fill near this value."
               },
               "response": []
             },
             {
-              "name": "A2 — Submit MARKET BUY (saves order_id)",
+              "name": "A2 \u00e2\u20ac\u201d Submit MARKET BUY (saves order_id)",
               "event": [
                 {
                   "listen": "test",
@@ -3363,12 +3490,12 @@
                     "orders"
                   ]
                 },
-                "description": "Kicks off the saga: PENDING → COMPLIANCE_CHECK → OPEN → FILLED. order_id is auto-saved."
+                "description": "Kicks off the saga: PENDING \u00e2\u2020\u2019 COMPLIANCE_CHECK \u00e2\u2020\u2019 OPEN \u00e2\u2020\u2019 FILLED. order_id is auto-saved."
               },
               "response": []
             },
             {
-              "name": "A3 — Poll order status",
+              "name": "A3 \u00e2\u20ac\u201d Poll order status",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3392,12 +3519,12 @@
                     "{{order_id}}"
                   ]
                 },
-                "description": "Check status field. Should quickly reach FILLED. If stuck at COMPLIANCE_CHECK or OPEN, the saga is still in flight — wait a moment and retry."
+                "description": "Check status field. Should quickly reach FILLED. If stuck at COMPLIANCE_CHECK or OPEN, the saga is still in flight \u00e2\u20ac\u201d wait a moment and retry."
               },
               "response": []
             },
             {
-              "name": "A4 — View saga for this order (saves saga_id)",
+              "name": "A4 \u00e2\u20ac\u201d View saga for this order (saves saga_id)",
               "event": [
                 {
                   "listen": "test",
@@ -3439,7 +3566,7 @@
               "response": []
             },
             {
-              "name": "A5 — Full audit trail for this order",
+              "name": "A5 \u00e2\u20ac\u201d Full audit trail for this order",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3470,7 +3597,7 @@
               "response": []
             },
             {
-              "name": "A6 — Check account balance",
+              "name": "A6 \u00e2\u20ac\u201d Check account balance",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3500,7 +3627,7 @@
               "response": []
             },
             {
-              "name": "A7 — View positions",
+              "name": "A7 \u00e2\u20ac\u201d View positions",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3530,7 +3657,7 @@
               "response": []
             },
             {
-              "name": "A8 — Check pending settlements",
+              "name": "A8 \u00e2\u20ac\u201d Check pending settlements",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3561,11 +3688,11 @@
           ]
         },
         {
-          "name": "Flow B — Two-Trader Concurrent Orders",
+          "name": "Flow B \u00e2\u20ac\u201d Two-Trader Concurrent Orders",
           "description": "trader1 and trader2 each submit orders independently, then you inspect both their accounts. Demonstrates multi-user isolation.",
           "item": [
             {
-              "name": "B1 — trader1 buys TSLA",
+              "name": "B1 \u00e2\u20ac\u201d trader1 buys TSLA",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3607,7 +3734,7 @@
               "response": []
             },
             {
-              "name": "B2 — trader2 buys NVDA",
+              "name": "B2 \u00e2\u20ac\u201d trader2 buys NVDA",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3649,7 +3776,7 @@
               "response": []
             },
             {
-              "name": "B3 — trader1 account",
+              "name": "B3 \u00e2\u20ac\u201d trader1 account",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3678,7 +3805,7 @@
               "response": []
             },
             {
-              "name": "B4 — trader2 account",
+              "name": "B4 \u00e2\u20ac\u201d trader2 account",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3707,7 +3834,7 @@
               "response": []
             },
             {
-              "name": "B5 — trader1 positions",
+              "name": "B5 \u00e2\u20ac\u201d trader1 positions",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3736,7 +3863,7 @@
               "response": []
             },
             {
-              "name": "B6 — trader2 positions",
+              "name": "B6 \u00e2\u20ac\u201d trader2 positions",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3767,11 +3894,11 @@
           ]
         },
         {
-          "name": "Flow C — Regulator Oversight",
+          "name": "Flow C \u00e2\u20ac\u201d Regulator Oversight",
           "description": "Regulator inspects system state across all users. Uses regulator1_token throughout.",
           "item": [
             {
-              "name": "C1 — List all users",
+              "name": "C1 \u00e2\u20ac\u201d List all users",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3800,7 +3927,7 @@
               "response": []
             },
             {
-              "name": "C2 — All active sagas",
+              "name": "C2 \u00e2\u20ac\u201d All active sagas",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3830,7 +3957,7 @@
               "response": []
             },
             {
-              "name": "C3 — trader1 compliance history",
+              "name": "C3 \u00e2\u20ac\u201d trader1 compliance history",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3859,7 +3986,7 @@
               "response": []
             },
             {
-              "name": "C4 — All audit events (page 1)",
+              "name": "C4 \u00e2\u20ac\u201d All audit events (page 1)",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3897,7 +4024,7 @@
               "response": []
             },
             {
-              "name": "C5 — Pending settlements",
+              "name": "C5 \u00e2\u20ac\u201d Pending settlements",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3925,7 +4052,7 @@
               "response": []
             },
             {
-              "name": "C6 — Trigger flash_crash scenario",
+              "name": "C6 \u00e2\u20ac\u201d Trigger flash_crash scenario",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3957,7 +4084,7 @@
               "response": []
             },
             {
-              "name": "C7 — Stop active scenario",
+              "name": "C7 \u00e2\u20ac\u201d Stop active scenario",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -3989,11 +4116,11 @@
           ]
         },
         {
-          "name": "Flow D — Chaos Engineering Test",
+          "name": "Flow D \u00e2\u20ac\u201d Chaos Engineering Test",
           "description": "Inject network latency, submit an order while chaos is active, observe behaviour, then stop. Uses botoperator1_token for chaos endpoints.",
           "item": [
             {
-              "name": "D1 — Start chaos (2s latency)",
+              "name": "D1 \u00e2\u20ac\u201d Start chaos (2s latency)",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -4037,7 +4164,7 @@
               "response": []
             },
             {
-              "name": "D2 — Submit order under chaos",
+              "name": "D2 \u00e2\u20ac\u201d Submit order under chaos",
               "event": [
                 {
                   "listen": "test",
@@ -4087,12 +4214,12 @@
                     "orders"
                   ]
                 },
-                "description": "Submit while chaos is active. Check the Postman console — response time should reflect the injected latency."
+                "description": "Submit while chaos is active. Check the Postman console \u00e2\u20ac\u201d response time should reflect the injected latency."
               },
               "response": []
             },
             {
-              "name": "D3 — Check chaos status",
+              "name": "D3 \u00e2\u20ac\u201d Check chaos status",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -4121,7 +4248,7 @@
               "response": []
             },
             {
-              "name": "D4 — Stop chaos",
+              "name": "D4 \u00e2\u20ac\u201d Stop chaos",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -4152,11 +4279,11 @@
           ]
         },
         {
-          "name": "Flow E — Stop-Loss Order Lifecycle",
+          "name": "Flow E \u00e2\u20ac\u201d Stop-Loss Order Lifecycle",
           "description": "End-to-end test of the stop-loss feature. Submits a stop-loss sell order, confirms it parks as PENDING_TRIGGER, fires the trigger manually, and verifies the order fills through the saga.\n\nRun 00 - Setup & Auth first to populate tokens.",
           "item": [
             {
-              "name": "E1 — Check current AAPL price",
+              "name": "E1 \u00e2\u20ac\u201d Check current AAPL price",
               "request": {
                 "auth": {
                   "type": "noauth"
@@ -4179,7 +4306,7 @@
               "response": []
             },
             {
-              "name": "E2 — Submit STOP_LOSS SELL order (saves order_id)",
+              "name": "E2 \u00e2\u20ac\u201d Submit STOP_LOSS SELL order (saves order_id)",
               "event": [
                 {
                   "listen": "test",
@@ -4229,12 +4356,12 @@
                     "orders"
                   ]
                 },
-                "description": "triggerPrice is set to 9999.00 — well above any real market price — so the order parks immediately as PENDING_TRIGGER. E5 will fire it by supplying a currentPrice of 1.00.\n\norder_id is auto-saved. The test script asserts status is PENDING_TRIGGER."
+                "description": "triggerPrice is set to 9999.00 \u00e2\u20ac\u201d well above any real market price \u00e2\u20ac\u201d so the order parks immediately as PENDING_TRIGGER. E5 will fire it by supplying a currentPrice of 1.00.\n\norder_id is auto-saved. The test script asserts status is PENDING_TRIGGER."
               },
               "response": []
             },
             {
-              "name": "E3 — Confirm order is PENDING_TRIGGER",
+              "name": "E3 \u00e2\u20ac\u201d Confirm order is PENDING_TRIGGER",
               "event": [
                 {
                   "listen": "test",
@@ -4275,7 +4402,7 @@
               "response": []
             },
             {
-              "name": "E4 — View saga (compliance passed, parked)",
+              "name": "E4 \u00e2\u20ac\u201d View saga (compliance passed, parked)",
               "event": [
                 {
                   "listen": "test",
@@ -4314,12 +4441,12 @@
                     "{{order_id}}"
                   ]
                 },
-                "description": "The saga should be COMPLETED with currentStep=5 but only one step recorded (COMPLIANCE_CHECK). Steps 2-4 were skipped because the order type is STOP_LOSS — execution is deferred until the price triggers."
+                "description": "The saga should be COMPLETED with currentStep=5 but only one step recorded (COMPLIANCE_CHECK). Steps 2-4 were skipped because the order type is STOP_LOSS \u00e2\u20ac\u201d execution is deferred until the price triggers."
               },
               "response": []
             },
             {
-              "name": "E5 — Fire the stop-loss trigger (currentPrice=1.00)",
+              "name": "E5 \u00e2\u20ac\u201d Fire the stop-loss trigger (currentPrice=1.00)",
               "request": {
                 "auth": {
                   "type": "noauth"
@@ -4348,12 +4475,12 @@
                     }
                   ]
                 },
-                "description": "Tells order-service that AAPL is now trading at $1.00. Since our triggerPrice (9999.00) ≥ 1.00, the order transitions to TRIGGERED and a Kafka event fires to the saga-orchestrator to execute it as a market order."
+                "description": "Tells order-service that AAPL is now trading at $1.00. Since our triggerPrice (9999.00) \u00e2\u2030\u00a5 1.00, the order transitions to TRIGGERED and a Kafka event fires to the saga-orchestrator to execute it as a market order."
               },
               "response": []
             },
             {
-              "name": "E6 — Poll order status until FILLED",
+              "name": "E6 \u00e2\u20ac\u201d Poll order status until FILLED",
               "event": [
                 {
                   "listen": "test",
@@ -4390,12 +4517,12 @@
                     "{{order_id}}"
                   ]
                 },
-                "description": "Run this a moment after E5. Expected progression: PENDING_TRIGGER → TRIGGERED → FILLED.\n\nIf still TRIGGERED, the saga is still in-flight — wait a second and run again."
+                "description": "Run this a moment after E5. Expected progression: PENDING_TRIGGER \u00e2\u2020\u2019 TRIGGERED \u00e2\u2020\u2019 FILLED.\n\nIf still TRIGGERED, the saga is still in-flight \u00e2\u20ac\u201d wait a second and run again."
               },
               "response": []
             },
             {
-              "name": "E7 — View saga (all steps completed)",
+              "name": "E7 \u00e2\u20ac\u201d View saga (all steps completed)",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -4425,7 +4552,7 @@
               "response": []
             },
             {
-              "name": "E8 — Check audit trail",
+              "name": "E8 \u00e2\u20ac\u201d Check audit trail",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -4458,10 +4585,10 @@
           ]
         },
         {
-          "name": "Flow F — System Cancel · All 3 Branches (EQ-113b)",
+          "name": "Flow F \u00e2\u20ac\u201d System Cancel \u00c2\u00b7 All 3 Branches (EQ-113b)",
           "item": [
             {
-              "name": "F1 — Login trader1 (get token)",
+              "name": "F1 \u00e2\u20ac\u201d Login trader1 (get token)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -4505,7 +4632,7 @@
               ]
             },
             {
-              "name": "F2 — Confirm PENDING seed order (b1000000-...001)",
+              "name": "F2 \u00e2\u20ac\u201d Confirm PENDING seed order (b1000000-...001)",
               "request": {
                 "method": "GET",
                 "header": [
@@ -4528,7 +4655,7 @@
               }
             },
             {
-              "name": "F3 — System-cancel PENDING order → 200 CANCELLED",
+              "name": "F3 \u00e2\u20ac\u201d System-cancel PENDING order \u00e2\u2020\u2019 200 CANCELLED",
               "request": {
                 "method": "POST",
                 "header": [
@@ -4561,11 +4688,11 @@
                     }
                   }
                 },
-                "description": "Happy path — PENDING order. Expected: 200, status=CANCELLED, Kafka event published."
+                "description": "Happy path \u00e2\u20ac\u201d PENDING order. Expected: 200, status=CANCELLED, Kafka event published."
               }
             },
             {
-              "name": "F4 — System-cancel CANCELLED order → 200 no-op (idempotency)",
+              "name": "F4 \u00e2\u20ac\u201d System-cancel CANCELLED order \u00e2\u2020\u2019 200 no-op (idempotency)",
               "request": {
                 "method": "POST",
                 "header": [
@@ -4598,11 +4725,11 @@
                     }
                   }
                 },
-                "description": "No-op path — seed order GOOG LIMIT SELL is already CANCELLED. Expected: 200, no DB write, no Kafka event. Safe to call repeatedly."
+                "description": "No-op path \u00e2\u20ac\u201d seed order GOOG LIMIT SELL is already CANCELLED. Expected: 200, no DB write, no Kafka event. Safe to call repeatedly."
               }
             },
             {
-              "name": "F5 — System-cancel FILLED order → 409 ORDER_IN_TERMINAL_STATE",
+              "name": "F5 \u00e2\u20ac\u201d System-cancel FILLED order \u00e2\u2020\u2019 409 ORDER_IN_TERMINAL_STATE",
               "request": {
                 "method": "POST",
                 "header": [
@@ -4635,11 +4762,11 @@
                     }
                   }
                 },
-                "description": "Terminal-state path — seed order MSFT MARKET BUY is FILLED (money already moved). Expected: 409 with error=ORDER_IN_TERMINAL_STATE. Ops must reconcile manually."
+                "description": "Terminal-state path \u00e2\u20ac\u201d seed order MSFT MARKET BUY is FILLED (money already moved). Expected: 409 with error=ORDER_IN_TERMINAL_STATE. Ops must reconcile manually."
               }
             },
             {
-              "name": "F6 — System-cancel PENDING_TRIGGER stop-loss → 200 CANCELLED",
+              "name": "F6 \u00e2\u20ac\u201d System-cancel PENDING_TRIGGER stop-loss \u00e2\u2020\u2019 200 CANCELLED",
               "request": {
                 "method": "POST",
                 "header": [
@@ -4672,11 +4799,11 @@
                     }
                   }
                 },
-                "description": "Stop-loss path — seed order NVDA STOP_LOSS SELL is PENDING_TRIGGER (not yet triggered). Expected: 200, status=CANCELLED."
+                "description": "Stop-loss path \u00e2\u20ac\u201d seed order NVDA STOP_LOSS SELL is PENDING_TRIGGER (not yet triggered). Expected: 200, status=CANCELLED."
               }
             },
             {
-              "name": "F7 — System-cancel OPEN order → 200 CANCELLED",
+              "name": "F7 \u00e2\u20ac\u201d System-cancel OPEN order \u00e2\u2020\u2019 200 CANCELLED",
               "request": {
                 "method": "POST",
                 "header": [
@@ -4709,7 +4836,7 @@
                     }
                   }
                 },
-                "description": "OPEN path — seed order TSLA LIMIT BUY is sitting in the order book at $250.00. Expected: 200, status=CANCELLED, Kafka event published.\n\nNote: the order_book_entries row for this order (seeded in V3) will be orphaned until EQ-113c wires the order-book removal step into compensation."
+                "description": "OPEN path \u00e2\u20ac\u201d seed order TSLA LIMIT BUY is sitting in the order book at $250.00. Expected: 200, status=CANCELLED, Kafka event published.\n\nNote: the order_book_entries row for this order (seeded in V3) will be orphaned until EQ-113c wires the order-book removal step into compensation."
               }
             }
           ]
