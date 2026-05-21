@@ -1,8 +1,8 @@
 """
 Cleanup script for EQ-136 duplicate order scenario.
 
-Deletes all orders and related data created by the seed script (trader1 / trader2),
-preserving the Flyway seed data (UUIDs starting with b1000000-).
+Deletes ALL orders and related data not part of the Flyway seed
+(i.e. any order whose UUID does not start with b1000000-).
 
 Usage:
     python equiflow-mcp/cleanup_scenario.py           # dry run — shows what would be deleted
@@ -15,10 +15,6 @@ import sys
 
 POSTGRES_CONTAINER = "equiflow-postgres"
 POSTGRES_USER      = "equiflow"
-
-# trader1 and trader2 UUIDs (from Flyway seed)
-TRADER1_ID = "a1000000-0000-0000-0000-000000000001"
-TRADER2_ID = "a1000000-0000-0000-0000-000000000004"
 
 # Flyway-seeded order IDs start with this prefix — never delete these
 SEED_PREFIX = "b1000000"
@@ -55,8 +51,7 @@ def main():
     else:
         print("\n  EXECUTING CLEANUP\n")
 
-    user_filter  = f"user_id IN ('{TRADER1_ID}', '{TRADER2_ID}')"
-    order_filter = f"{user_filter} AND id::text NOT LIKE '{SEED_PREFIX}%'"
+    order_filter = f"id::text NOT LIKE '{SEED_PREFIX}%'"
 
     # ── 1. Collect order IDs to delete ──────────────────────────────────────
     order_ids_raw = psql(
@@ -66,7 +61,7 @@ def main():
     order_ids = [oid.strip() for oid in order_ids_raw.splitlines() if oid.strip()]
     n_orders = len(order_ids)
 
-    print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_orders} orders (trader1 + trader2, excluding Flyway seed)")
+    print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_orders} orders (all non-seed)")
 
     if n_orders == 0:
         print("\n  Nothing to clean up — already fresh.\n")
