@@ -598,12 +598,16 @@ python equiflow-mcp/duplicate_agent.py "Check the last 2 hours for duplicate tra
 **Overall assessment:** `CLEAR` (no duplicates) · `REVIEW` (MEDIUM/LOW only) · `ESCALATE` (any HIGH pair)
 
 **Example output:**
-> 10 duplicate pairs found.
-> trader1 — NFLX BUY 5 @ 95.00  suspicion: HIGH  gap: 1s
-> trader2 — NVDA SELL 5 @ 95.00  suspicion: HIGH  gap: 1s
-> ... (8 more)
-> Repeat offenders: trader1 (5 groups), trader2 (5 groups)
-> **Assessment: ESCALATE** — 10 HIGH-suspicion pairs detected. Both orders in each pair may have already executed.
+```
+Total duplicate pairs found: 1
+
+| User       | Ticker | Side | Qty | Price  | Gap    | Suspicion | Original UUID        | Duplicate UUID       |
+|------------|--------|------|-----|--------|--------|-----------|----------------------|----------------------|
+| ...0001    | AMD    | BUY  | 5   | 419.53 | 1.08s  | HIGH      | 2575de17-...         | e8e93ba6-...         |
+
+Repeat offenders: none
+Assessment: ESCALATE
+```
 
 ---
 

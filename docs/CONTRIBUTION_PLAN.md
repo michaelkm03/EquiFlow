@@ -1154,7 +1154,7 @@ Three agents, one per invocation pattern. Each builds on the existing `run_agent
 | ⚪ | <nobr>[EQ-134](#eq-134--agent-test-suite-settlement-reconciliation-agent)</nobr> | Agent Test Suite — Settlement Reconciliation Agent | 3 | P1 — depends on EQ-131 |
 | ⚪ | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 |
 | ⚪ | <nobr>[EQ-135](#eq-135--agent-test-suite-order-failure-escalation-agent)</nobr> | Agent Test Suite — Order Failure Escalation Agent | 3 | P1 — depends on EQ-132 |
-| ⚪ | <nobr>[EQ-136](#eq-136--duplicate-order-detection-agent)</nobr> | Duplicate Order Detection Agent | 5 | P1 |
+| ✅ | <nobr>[EQ-136](#eq-136--duplicate-order-detection-agent)</nobr> | Duplicate Order Detection Agent | 5 | P1 |
 
 ---
 
@@ -1878,8 +1878,8 @@ python equiflow-mcp/cleanup_scenario.py --execute
 # 1. Seed — default 100 msgs, 10% dups, 1s delay → ESCALATE; writes scenario_pairs.json
 python equiflow-mcp/seed_duplicate_orders.py
 
-# Quick run (10 msgs, 1 dup)
-python equiflow-mcp/seed_duplicate_orders.py --messages 10 --duplicate-pct 10
+# Quick run (10 msgs, 1 dup, ~6s total)
+python equiflow-mcp/seed_duplicate_orders.py --messages 10 --duration 5000 --duplicate-pct 10
 
 # 2. Run the agent — writes agent_findings.json
 python equiflow-mcp/duplicate_agent.py "Scan today's orders for duplicates"
@@ -1893,18 +1893,22 @@ python equiflow-mcp/compare_duplicates.py
 - New: `equiflow-mcp/seed_duplicate_orders.py`
 - New: `equiflow-mcp/cleanup_scenario.py`
 - New: `equiflow-mcp/compare_duplicates.py`
-- Modified: `order-service/src/main/java/com/equiflow/order/controller/OrderController.java`
-- Modified: `equiflow-mcp/equiflow_data_server.py`
+- Modified: `equiflow-mcp/loop.py` — auto-loads `.env` API key; bumped `max_tokens` to 16 000
+- Modified: `equiflow-mcp/equiflow_data_server.py` — added `userId` filter to `list_orders`
+- Modified: `order-service/.../OrderController.java` — added optional `userId` query param to `GET /orders/internal/all`
+- Modified: `order-service/.../MatchingEngine.java` — fixed divide-by-zero when `totalFilled = 0`
+- Modified: `docker-compose.yml` — added Kafdrop at port 9000
+- Modified: `.env.example` — added `MARKET_HOURS_BYPASS=true`
 
 **Acceptance Criteria:**
-- [ ] `GET /orders/internal/all?userId=<uuid>` returns only orders for that user
-- [ ] `GET /orders/internal/all` with no `userId` still returns all orders (backwards compatible)
-- [ ] `list_orders` MCP tool accepts and passes through `userId` param
-- [ ] `seed_duplicate_orders.py` places duplicate orders and writes `scenario_pairs.json` with orig/dup UUIDs
-- [ ] Running the agent after the seed detects the pairs, outputs UUID table, and writes `agent_findings.json`
-- [ ] `compare_duplicates.py` reads both JSON files and shows ✓ FOUND / ✗ MISSED / ! EXTRA per pair with detection rate
-- [ ] Agent correctly reports CLEAR when no duplicates exist in the window
-- [ ] Agent paginates if total orders exceed the page size
+- [x] `GET /orders/internal/all?userId=<uuid>` returns only orders for that user
+- [x] `GET /orders/internal/all` with no `userId` still returns all orders (backwards compatible)
+- [x] `list_orders` MCP tool accepts and passes through `userId` param
+- [x] `seed_duplicate_orders.py` places duplicate orders and writes `scenario_pairs.json` with orig/dup UUIDs
+- [x] Running the agent after the seed detects the pairs, outputs UUID table, and writes `agent_findings.json`
+- [x] `compare_duplicates.py` reads both JSON files and shows ✓ FOUND / ✗ MISSED / ! EXTRA per pair with detection rate
+- [x] Agent correctly reports CLEAR when no duplicates exist in the window
+- [x] Agent paginates if total orders exceed the page size
 
 ---
 
