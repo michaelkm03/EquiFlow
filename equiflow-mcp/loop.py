@@ -1,5 +1,17 @@
+import os
+from pathlib import Path
+
 import anthropic
 from typing import Any, Callable, Coroutine
+
+# Load .env from project root if ANTHROPIC_API_KEY isn't already in the environment
+_env_file = Path(__file__).parent.parent / ".env"
+if _env_file.exists() and not os.environ.get("ANTHROPIC_API_KEY"):
+    for line in _env_file.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, _, v = line.partition("=")
+            os.environ.setdefault(k.strip(), v.strip())
 
 
 async def run_agent(
@@ -16,7 +28,7 @@ async def run_agent(
         print(f"\n[iteration {iteration}] sending to model...")
         response = client.messages.create(
             model="claude-opus-4-7",
-            max_tokens=4096,
+            max_tokens=16000,
             system=system,
             tools=tools,
             messages=messages,
