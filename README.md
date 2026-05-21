@@ -35,6 +35,7 @@ A high-integrity US equity trading engine built with Java 21 and Spring Boot 3.x
 | audit-service | 8087 | Append-only event log |
 | saga-orchestrator | 8088 | Distributed transaction coordinator |
 | surge-simulator | 8089 | Chaos injection |
+| kafdrop | 9000 | Kafka topic browser (dev tool) |
 
 ---
 
@@ -340,6 +341,32 @@ curl -X POST http://localhost:8080/admin/chaos/stop \
 
 ---
 
+## Kafka — Tracing Messages
+
+**Kafdrop** is included as a dev tool — a browser UI for browsing all Kafka topics and messages.
+
+Open **http://localhost:9000** after `docker-compose up`.
+
+From Kafdrop you can:
+- See all `equiflow.*` topics and their message counts
+- Click into any topic and browse individual messages as formatted JSON
+- Filter messages by offset to isolate a specific scenario run
+- Watch the order flow end-to-end across topics
+
+**Topics produced during a scenario:**
+
+| Topic | Producer | What it carries |
+|---|---|---|
+| `equiflow.order.placed` | order-service | Every new order with userId, ticker, side, qty, price, status |
+| `equiflow.order.filled` | order-service | Order fill events |
+| `equiflow.order.cancelled` | order-service | Order cancellation events |
+| `equiflow.compliance.approved` | compliance-service | Orders that passed compliance check |
+| `equiflow.order.stop-loss.triggered` | order-service | Stop-loss trigger fired |
+
+**Tip for scenario tracing:** note the message offset in Kafdrop before you run the seed script, then use "Jump to offset" after to see only messages from your run.
+
+---
+
 ## Market Scenarios
 
 ```bash
@@ -449,8 +476,12 @@ All agents share a common reusable loop (`loop.py`) and a set of tool handlers (
 ```
 loop.py                    # run_agent() — the reusable agent loop, shared by all agents
 equiflow_data_server.py    # tool handlers + MCP server (Claude Code integration)
-agent.py                   # Order triage agent        (on-demand CLI)
-compliance_agent.py        # Compliance breach agent   (on-demand CLI)
+agent.py                   # Order triage agent               (on-demand CLI)
+compliance_agent.py        # Compliance breach agent          (on-demand CLI)
+duplicate_agent.py         # Duplicate order detection agent  (on-demand CLI)
+seed_duplicate_orders.py   # Duplicate scenario seed script   → writes scenario_pairs.json
+cleanup_scenario.py        # Delete scenario test data between runs
+compare_duplicates.py      # Reconcile seed pairs vs agent findings
 ```
 
 **Adding a new agent:** create a new `*_agent.py` file. Import `run_agent` from `loop.py`, define `SYSTEM_TEMPLATE`, `TOOLS`, `DISPATCH`, `call_tool`, and `main`. The loop never changes.
@@ -464,7 +495,7 @@ compliance_agent.py        # Compliance breach agent   (on-demand CLI)
 | `get_order` | `GET /orders/{id}` | Order status, saga ID, timestamps | triage, compliance |
 | `get_saga` | `GET /sagas/{id}` | Step trace, failure reason, state | triage |
 | `query_audit_log` | `GET /audit/events/order/{id}` | Retry history, last attempt time | triage |
-| `list_orders` | `GET /orders` | Paginated, filterable order list | triage, compliance |
+| `list_orders` | `GET /orders/internal/all` | Paginated, filterable order list | triage, compliance, duplicate |
 | `get_compliance_result` | `GET /compliance/results/order/{id}` | Violation type, reason, timestamp | compliance |
 
 Auth is handled automatically — the server logs in as `bot-operator1` on first use and refreshes the token on expiry.
@@ -538,6 +569,151 @@ python equiflow-mcp/compliance_agent.py "Which accounts have repeated wash-sale 
 
 **Example output:**
 > 4 compliance breaches today. INSUFFICIENT_FUNDS: 3 (accounts trader1, trader2, trader3). WASH_SALE: 1 (account trader2 — repeat offender, 2 violations this week). Most recent: trader1 at 14:45, AAPL BUY rejected for insufficient funds ($2,400 short).
+
+---
+
+### Agent 3 — Duplicate Order Detection (on-demand)
+
+Scans all orders in a time window for duplicate submissions — identical business fields, different UUIDs — and assigns a suspicion level based on how close together they were placed.
+
+```bash
+python equiflow-mcp/duplicate_agent.py "Scan today's orders for duplicates"
+python equiflow-mcp/duplicate_agent.py "Check the last 2 hours for duplicate trades"
+```
+
+**What it does:**
+1. `list_orders(from=..., to=..., size=100)` — fetches all orders for the window, paginates if needed
+2. Groups by `(userId, ticker, side, quantity, limitPrice, type)` — any group with >1 order is a duplicate
+3. Calculates time delta between earliest and latest order in each group; assigns suspicion level
+4. Reports total pairs, per-pair detail, repeat offenders, and an overall assessment
+
+**Suspicion levels:**
+
+| Gap between orders | Level | Interpretation |
+|---|---|---|
+| < 5 seconds | HIGH | Almost certainly accidental — double-click or client retry |
+| 5–30 seconds | MEDIUM | Possible API retry or client glitch |
+| > 30 seconds | LOW | May be intentional; flag for human review |
+
+**Overall assessment:** `CLEAR` (no duplicates) · `REVIEW` (MEDIUM/LOW only) · `ESCALATE` (any HIGH pair)
+
+**Example output:**
+```
+Total duplicate pairs found: 1
+
+| User       | Ticker | Side | Qty | Price  | Gap    | Suspicion | Original UUID        | Duplicate UUID       |
+|------------|--------|------|-----|--------|--------|-----------|----------------------|----------------------|
+| ...0001    | AMD    | BUY  | 5   | 419.53 | 1.08s  | HIGH      | 2575de17-...         | e8e93ba6-...         |
+
+Repeat offenders: none
+Assessment: ESCALATE
+```
+
+---
+
+### Seed Scenario — Duplicate Orders
+
+`equiflow-mcp/seed_duplicate_orders.py` populates the database with a configurable duplicate scenario so you can verify the agent end-to-end.
+
+**How orders are placed:** the script authenticates as `trader1` and `trader2` using `POST /auth/token`, then calls `POST /orders` for each message. A duplicate is placed by re-sending the exact same JSON body the user last submitted — no special flag, no idempotency key. The server assigns a new UUID to each call and processes both orders independently through the full saga. The system does not detect the duplicate at write time; the agent detects it after the fact by grouping on business fields.
+
+> **Market hours:** the seed script requires `market.hours.bypass=true` on `order-service`. Set `MARKET_HOURS_BYPASS=true` in your `.env` before running outside NYSE hours (9:30 AM–4:00 PM ET, weekdays).
+
+**Scenario parameters (defaults):**
+
+| Parameter | Formula | Value |
+|---|---|---|
+| Total messages (X) | — | 100 |
+| Seed window (Y) | — | 30,000 ms |
+| Duplicate % (Z) | — | 10% |
+| Total duplicates | X × Z/100 | 10 |
+| Total unique | X − dups | 90 |
+| Duplicate step | 100 / Z | every 10th message |
+| Base interval | Y / n_unique | ~333 ms |
+| Duplicate delay | `--duplicate-delay` | 1 s |
+| trader1 share | 60% × X | 60 messages |
+| trader2 share | 40% × X | 40 messages |
+| **Total seed time** | 9×333ms + 1s × 10 | **~13 s** |
+
+> **Prices** are randomized 0.01–1000.00 per unique order. A duplicate re-sends the exact same price as its original, which is what makes it detectable.
+
+**Message feed (representative sample, positions 1–25):**
+
+| # | Type | T+ | User | Ticker | Side | Qty | Price | Note |
+|---|------|----|------|--------|------|-----|-------|------|
+| 1 | unique | 0.3s | trader1 | AAPL | BUY | 5 | 95.00 | — |
+| 2 | unique | 0.7s | trader2 | MSFT | BUY | 5 | 95.00 | — |
+| 3 | unique | 1.0s | trader1 | TSLA | BUY | 5 | 95.00 | — |
+| 4 | unique | 1.3s | trader2 | AMZN | BUY | 5 | 95.00 | — |
+| 5 | unique | 1.7s | trader1 | GOOGL | BUY | 5 | 95.00 | — |
+| 6 | unique | 2.0s | trader1 | META | BUY | 5 | 95.00 | — |
+| 7 | unique | 2.3s | trader2 | NVDA | BUY | 5 | 95.00 | — |
+| 8 | unique | 2.7s | **trader1** | **NFLX** | **BUY** | **5** | **95.00** | original |
+| 9 | unique | 3.0s | trader2 | AMD | BUY | 5 | 95.00 | — |
+| **10** | **DUPLICATE** | **4.0s** | **trader1** | **NFLX** | **BUY** | **5** | **95.00** | copies #8, +1s |
+| 11 | unique | 8.3s | trader1 | INTC | BUY | 5 | 95.00 | — |
+| 12 | unique | 8.7s | trader2 | AAPL | SELL | 5 | 95.00 | — |
+| 13 | unique | 9.0s | trader1 | MSFT | SELL | 5 | 95.00 | — |
+| 14 | unique | 9.3s | trader2 | TSLA | SELL | 5 | 95.00 | — |
+| 15 | unique | 9.7s | trader1 | AMZN | SELL | 5 | 95.00 | — |
+| 16 | unique | 10.0s | trader2 | GOOGL | SELL | 5 | 95.00 | — |
+| 17 | unique | 10.3s | trader1 | META | SELL | 5 | 95.00 | — |
+| 18 | unique | 10.7s | **trader2** | **NVDA** | **SELL** | **5** | **95.00** | original |
+| 19 | unique | 11.0s | trader1 | NFLX | SELL | 5 | 95.00 | — |
+| **20** | **DUPLICATE** | **8.0s** | **trader2** | **NVDA** | **SELL** | **5** | **95.00** | copies #18, +1s |
+| 21 | unique | 16.3s | trader2 | AMD | SELL | 5 | 95.00 | — |
+| 22 | unique | 16.7s | trader1 | INTC | SELL | 5 | 95.00 | — |
+| ... | ... | ... | ... | ... | ... | ... | ... | pattern repeats |
+
+**Duplicate pairs (end of run, default scenario):**
+
+Prices are random per run — the table below shows structure only.
+
+| Dup # | Orig # | User | Ticker | Side | Qty | Price | Gap | Suspicion |
+|---|---|---|---|---|---|---|---|---|
+| 10 | 8 | trader1 | NFLX | BUY | 5 | rand | ~1s | **HIGH** |
+| 20 | 18 | trader2 | NVDA | SELL | 5 | rand | ~1s | **HIGH** |
+| 30 | 28 | trader1 | AAPL | SELL | 10 | rand | ~1s | **HIGH** |
+| 40 | 38 | trader2 | META | BUY | 10 | rand | ~1s | **HIGH** |
+| 50 | 48 | trader1 | TSLA | BUY | 15 | rand | ~1s | **HIGH** |
+| 60 | 58 | trader2 | AMZN | SELL | 15 | rand | ~1s | **HIGH** |
+| 70 | 68 | trader1 | NVDA | BUY | 20 | rand | ~1s | **HIGH** |
+| 80 | 78 | trader2 | INTC | SELL | 20 | rand | ~1s | **HIGH** |
+| 90 | 88 | trader1 | AMD | BUY | 25 | rand | ~1s | **HIGH** |
+| 100 | 98 | trader2 | GOOGL | SELL | 25 | rand | ~1s | **HIGH** |
+
+Up to 10 pairs — all HIGH → agent outputs **ESCALATE**. (Actual count may be 9 if a duplicate position fires before that user's first unique order.)
+
+**Scenario variants:**
+
+| `--duplicate-delay` | Gap | Suspicion | Expected assessment |
+|---|---|---|---|
+| `1s` (default) | <5s | HIGH | ESCALATE |
+| `10s` | 5–30s | MEDIUM | REVIEW |
+| `60s` | >30s | LOW | REVIEW |
+
+**Run it:**
+
+```bash
+# Requires: docker-compose up + MARKET_HOURS_BYPASS=true in .env
+
+# 0. Clean previous test data (if re-running)
+python equiflow-mcp/cleanup_scenario.py --execute
+
+# 1. Seed — writes scenario_pairs.json on completion
+python equiflow-mcp/seed_duplicate_orders.py               # 100 msgs, 1s delay → ESCALATE
+python equiflow-mcp/seed_duplicate_orders.py --messages 10 --duplicate-pct 10  # quick 10-msg run
+
+# MEDIUM / LOW variants
+python equiflow-mcp/seed_duplicate_orders.py --duplicate-delay 10s
+python equiflow-mcp/seed_duplicate_orders.py --duplicate-delay 60s
+
+# 2. Run the agent — writes agent_findings.json on completion
+python equiflow-mcp/duplicate_agent.py "Scan today's orders for duplicates"
+
+# 3. Reconcile seed vs agent
+python equiflow-mcp/compare_duplicates.py
+```
 
 ---
 

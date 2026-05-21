@@ -1154,6 +1154,7 @@ Three agents, one per invocation pattern. Each builds on the existing `run_agent
 | ⚪ | <nobr>[EQ-134](#eq-134--agent-test-suite-settlement-reconciliation-agent)</nobr> | Agent Test Suite — Settlement Reconciliation Agent | 3 | P1 — depends on EQ-131 |
 | ⚪ | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 |
 | ⚪ | <nobr>[EQ-135](#eq-135--agent-test-suite-order-failure-escalation-agent)</nobr> | Agent Test Suite — Order Failure Escalation Agent | 3 | P1 — depends on EQ-132 |
+| ✅ | <nobr>[EQ-136](#eq-136--duplicate-order-detection-agent)</nobr> | Duplicate Order Detection Agent | 5 | P1 |
 
 ---
 
@@ -1688,6 +1689,226 @@ pytest tests/test_handlers.py tests/test_escalation_agent_behavior.py -v
 - [ ] All Tier 2 behavioral tests pass with zero real Anthropic or HTTP calls
 - [ ] Decision rules in the system prompt are each covered by at least one test case
 - [ ] `pytest tests/` exits 0 in CI alongside EQ-133 and EQ-134 tests
+
+---
+
+### EQ-136 · Duplicate Order Detection Agent
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 5 | P1 |
+
+**Invocation pattern:** On-demand — a compliance officer runs it to scan for suspicious duplicate trades, or after running the seed script to verify the scenario works.
+
+**Problem it solves:** When a user submits the same order twice — different UUID but identical fields — both orders process successfully. Nothing fails. No alert fires. The most common real-world causes are a double-click on a mobile submit button, a client SDK retry with a new UUID after a network timeout, or a bot with no deduplication logic. Today a compliance officer has no automated tool to surface this. This agent scans all orders in a given time window, identifies pairs where all business fields match except the UUID, and assigns a suspicion level based on time proximity.
+
+**Duplicate definition:** two or more orders sharing the same `userId + ticker + side + quantity + limitPrice + type` but different UUIDs.
+
+**Suspicion levels:**
+
+| Time between orders | Level | Interpretation |
+|---|---|---|
+| < 5 seconds | HIGH | Almost certainly accidental — double-click or client retry |
+| 5–30 seconds | MEDIUM | Possible retry or API glitch |
+| > 30 seconds | LOW | May be intentional; flag for human review |
+
+**Open questions resolved:**
+- **Does `/orders/internal/all` support `userId` filtering?** No. `OrderController.listAllOrders()` hardcodes `null` as the `userId` arg (line 139). Adding `userId` as an optional query param is required.
+- **How to inject the scenario?** A seed script that calls `POST /orders` twice with identical fields for a test user. No changes to surge simulator — this is a user behavior scenario, not a technical failure.
+
+**Services affected:**
+
+| Service | Change |
+|---------|--------|
+| `order-service` | Add optional `userId` query param to `GET /orders/internal/all`; pass through to `listOrders()` instead of hardcoded `null` |
+
+**MCP change:**
+`equiflow_data_server.py` — add `userId` (string, optional) to the `list_orders` tool input schema and include it in the query string builder in `handle_list_orders`.
+
+**Tools required:**
+
+| Tool | Status | Notes |
+|------|--------|-------|
+| `list_orders` | Updated | Add `userId` filter; needed to pull all orders for a user or all users in a window |
+
+**Agent reasoning chain:**
+```
+list_orders(from=<start>, to=<end>, size=100)
+  → group orders by (userId, ticker, side, quantity, limitPrice, type)
+  → for each group with count > 1:
+      calculate time delta between createdAt timestamps
+      assign suspicion level: HIGH (<5s), MEDIUM (5–30s), LOW (>30s)
+  → report findings with overall risk assessment
+```
+
+**System prompt:**
+```
+You are an EquiFlow duplicate order detection agent. Today's date is {today}.
+
+Your goal: identify orders that appear to be duplicates — same user, ticker, side,
+quantity, price, and type — placed within a short time window.
+
+A duplicate is two or more orders with identical fields (userId, ticker, side,
+quantity, limitPrice, type) but different order IDs.
+
+Suspicion levels:
+- HIGH:   < 5 seconds apart   — almost certainly accidental (double-click, client retry)
+- MEDIUM: 5–30 seconds apart  — possible retry or API glitch
+- LOW:    > 30 seconds apart  — may be intentional; flag for human review
+
+Steps:
+1. Call list_orders with the date range from the question (default to today).
+   Use size=100 and paginate if needed to cover the full window.
+2. Group orders by (userId, ticker, side, quantity, limitPrice, type).
+3. For each group with more than one order, calculate time between them and assign
+   a suspicion level.
+
+Your final response must include:
+- Total duplicate pairs found (0 = clean)
+- A duplicate pairs table: User | Ticker | Side | Qty | Price | Gap | Suspicion | Original UUID | Duplicate UUID
+- Which users appear in more than one duplicate group (repeat offenders)
+- Overall assessment: CLEAR (no duplicates), REVIEW (MEDIUM/LOW only), or ESCALATE (any HIGH)
+
+Always include UUIDs — required for cross-referencing with the seed script output.
+Do not speculate on intent beyond what the time delta and fields suggest.
+```
+
+**Scenario seed script:**
+`equiflow-mcp/seed_duplicate_orders.py` — sends X orders over Y milliseconds across 2 trader accounts, where Z% of the X messages are duplicates. Duplicate mechanism: every `100/Z`th message is a re-submission of the immediately preceding order for that user (same fields, new UUID assigned by the server). Duplicates are sent `--duplicate-delay` after their original rather than on the base interval.
+
+**How orders are placed:** the script authenticates as `trader1` and `trader2` using `POST /auth/token`, then calls `POST /orders` for each message. A duplicate is placed by re-sending the exact same JSON body the user last submitted — no special flag, no idempotency key. The server assigns a new UUID to each call and processes both orders independently through the full saga. The system does not detect the duplicate at write time; the agent detects it after the fact by grouping on business fields.
+
+> **Market hours:** requires `market.hours.bypass=true` on `order-service`. Set `MARKET_HOURS_BYPASS=true` in `.env` before running outside NYSE hours (9:30 AM–4:00 PM ET, weekdays).
+
+User distribution (deterministic interleave, `random.seed=42`):
+
+| User | Share of X | Notes |
+|---|---|---|
+| trader1 | 60% | 60 messages in default run |
+| trader2 | 40% | 40 messages in default run |
+
+**Scenario parameters (defaults):**
+
+| Parameter | Formula | Value |
+|---|---|---|
+| Total messages (X) | — | 100 |
+| Seed window (Y) | — | 30,000 ms |
+| Duplicate % (Z) | — | 10% |
+| Total duplicates | X × Z/100 | 10 |
+| Total unique | X − dups | 90 |
+| Duplicate step | 100 / Z | every 10th message |
+| Base interval | Y / n_unique | ~333 ms |
+| Duplicate delay | `--duplicate-delay` | 1 s |
+| **Total seed time** | 9×333ms + 1s × 10 | **~13 s** |
+
+> **Prices** are randomized 0.01–1000.00 per unique order. A duplicate re-sends the exact same price, which is the fingerprint the agent matches on.
+
+**Message feed (representative sample, positions 1–25):**
+
+| # | Type | T+ | User | Ticker | Side | Qty | Price | Note |
+|---|------|----|------|--------|------|-----|-------|------|
+| 1 | unique | 0.3s | trader1 | AAPL | BUY | 5 | 95.00 | — |
+| 2 | unique | 0.7s | trader2 | MSFT | BUY | 5 | 95.00 | — |
+| 3 | unique | 1.0s | trader1 | TSLA | BUY | 5 | 95.00 | — |
+| 4 | unique | 1.3s | trader2 | AMZN | BUY | 5 | 95.00 | — |
+| 5 | unique | 1.7s | trader1 | GOOGL | BUY | 5 | 95.00 | — |
+| 6 | unique | 2.0s | trader1 | META | BUY | 5 | 95.00 | — |
+| 7 | unique | 2.3s | trader2 | NVDA | BUY | 5 | 95.00 | — |
+| 8 | unique | 2.7s | **trader1** | **NFLX** | **BUY** | **5** | **95.00** | original |
+| 9 | unique | 3.0s | trader2 | AMD | BUY | 5 | 95.00 | — |
+| **10** | **DUPLICATE** | **4.0s** | **trader1** | **NFLX** | **BUY** | **5** | **95.00** | copies #8, +1s |
+| 11 | unique | 8.3s | trader1 | INTC | BUY | 5 | 95.00 | — |
+| 12 | unique | 8.7s | trader2 | AAPL | SELL | 5 | 95.00 | — |
+| 13 | unique | 9.0s | trader1 | MSFT | SELL | 5 | 95.00 | — |
+| 14 | unique | 9.3s | trader2 | TSLA | SELL | 5 | 95.00 | — |
+| 15 | unique | 9.7s | trader1 | AMZN | SELL | 5 | 95.00 | — |
+| 16 | unique | 10.0s | trader2 | GOOGL | SELL | 5 | 95.00 | — |
+| 17 | unique | 10.3s | trader1 | META | SELL | 5 | 95.00 | — |
+| 18 | unique | 10.7s | **trader2** | **NVDA** | **SELL** | **5** | **95.00** | original |
+| 19 | unique | 11.0s | trader1 | NFLX | SELL | 5 | 95.00 | — |
+| **20** | **DUPLICATE** | **8.0s** | **trader2** | **NVDA** | **SELL** | **5** | **95.00** | copies #18, +1s |
+| 21 | unique | 16.3s | trader2 | AMD | SELL | 5 | 95.00 | — |
+| 22 | unique | 16.7s | trader1 | INTC | SELL | 5 | 95.00 | — |
+| ... | ... | ... | ... | ... | ... | ... | ... | pattern repeats |
+
+**Duplicate pairs (end of run, default scenario):**
+
+Prices are random per run — table shows structure only.
+
+| Dup # | Orig # | User | Ticker | Side | Qty | Price | Gap | Suspicion |
+|---|---|---|---|---|---|---|---|---|
+| 10 | 8 | trader1 | NFLX | BUY | 5 | rand | ~1s | **HIGH** |
+| 20 | 18 | trader2 | NVDA | SELL | 5 | rand | ~1s | **HIGH** |
+| 30 | 28 | trader1 | AAPL | SELL | 10 | rand | ~1s | **HIGH** |
+| 40 | 38 | trader2 | META | BUY | 10 | rand | ~1s | **HIGH** |
+| 50 | 48 | trader1 | TSLA | BUY | 15 | rand | ~1s | **HIGH** |
+| 60 | 58 | trader2 | AMZN | SELL | 15 | rand | ~1s | **HIGH** |
+| 70 | 68 | trader1 | NVDA | BUY | 20 | rand | ~1s | **HIGH** |
+| 80 | 78 | trader2 | INTC | SELL | 20 | rand | ~1s | **HIGH** |
+| 90 | 88 | trader1 | AMD | BUY | 25 | rand | ~1s | **HIGH** |
+| 100 | 98 | trader2 | GOOGL | SELL | 25 | rand | ~1s | **HIGH** |
+
+Up to 10 pairs — all HIGH → agent outputs **ESCALATE**.
+
+**Scenario variants:**
+
+| `--duplicate-delay` | Gap | Suspicion | Expected assessment |
+|---|---|---|---|
+| `1s` (default) | <5s | HIGH | ESCALATE |
+| `10s` | 5–30s | MEDIUM | REVIEW |
+| `60s` | >30s | LOW | REVIEW |
+
+Unique orders sent = `X * (1 - Z/100)`. Total messages sent = X.
+Seed script writes `scenario_pairs.json` on completion; agent writes `agent_findings.json`. Both are gitignored runtime artifacts.
+
+**Seed script interface:**
+```bash
+python equiflow-mcp/seed_duplicate_orders.py \
+  --messages 100 \       # X: total orders to send (duplicates count toward this total)
+  --duration 30000 \     # Y: total window in ms for unique orders
+  --duplicate-pct 10 \   # Z: % of X that are duplicates (default 10)
+  --duplicate-delay 1s   # delay between original and its duplicate (default 1s → HIGH suspicion)
+                         # use 10s for MEDIUM, 60s for LOW
+```
+
+**Example usage:**
+```bash
+# 0. Clean previous test data
+python equiflow-mcp/cleanup_scenario.py --execute
+
+# 1. Seed — default 100 msgs, 10% dups, 1s delay → ESCALATE; writes scenario_pairs.json
+python equiflow-mcp/seed_duplicate_orders.py
+
+# Quick run (10 msgs, 1 dup, ~6s total)
+python equiflow-mcp/seed_duplicate_orders.py --messages 10 --duration 5000 --duplicate-pct 10
+
+# 2. Run the agent — writes agent_findings.json
+python equiflow-mcp/duplicate_agent.py "Scan today's orders for duplicates"
+
+# 3. Compare what was seeded vs what the agent found
+python equiflow-mcp/compare_duplicates.py
+```
+
+**Files:**
+- New: `equiflow-mcp/duplicate_agent.py`
+- New: `equiflow-mcp/seed_duplicate_orders.py`
+- New: `equiflow-mcp/cleanup_scenario.py`
+- New: `equiflow-mcp/compare_duplicates.py`
+- Modified: `equiflow-mcp/loop.py` — auto-loads `.env` API key; bumped `max_tokens` to 16 000
+- Modified: `equiflow-mcp/equiflow_data_server.py` — added `userId` filter to `list_orders`
+- Modified: `order-service/.../OrderController.java` — added optional `userId` query param to `GET /orders/internal/all`
+- Modified: `order-service/.../MatchingEngine.java` — fixed divide-by-zero when `totalFilled = 0`
+- Modified: `docker-compose.yml` — added Kafdrop at port 9000
+- Modified: `.env.example` — added `MARKET_HOURS_BYPASS=true`
+
+**Acceptance Criteria:**
+- [x] `GET /orders/internal/all?userId=<uuid>` returns only orders for that user
+- [x] `GET /orders/internal/all` with no `userId` still returns all orders (backwards compatible)
+- [x] `list_orders` MCP tool accepts and passes through `userId` param
+- [x] `seed_duplicate_orders.py` places duplicate orders and writes `scenario_pairs.json` with orig/dup UUIDs
+- [x] Running the agent after the seed detects the pairs, outputs UUID table, and writes `agent_findings.json`
+- [x] `compare_duplicates.py` reads both JSON files and shows ✓ FOUND / ✗ MISSED / ! EXTRA per pair with detection rate
+- [x] Agent correctly reports CLEAR when no duplicates exist in the window
+- [x] Agent paginates if total orders exceed the page size
 
 ---
 

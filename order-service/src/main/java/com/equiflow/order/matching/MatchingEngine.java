@@ -101,6 +101,11 @@ public class MatchingEngine {
             eventPublisher.publishOrderFilled(resting);
         }
 
+        if (totalFilled.compareTo(BigDecimal.ZERO) == 0) {
+            order.setStatus(OrderStatus.OPEN);
+            return orderRepository.save(order);
+        }
+
         BigDecimal avgPrice = weightedPriceSum.divide(totalFilled, 4, RoundingMode.HALF_UP);
         order.setFilledQty(totalFilled);
         order.setFilledPrice(avgPrice);

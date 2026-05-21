@@ -82,13 +82,17 @@ async def list_tools() -> list[Tool]:
             name="list_orders",
             description=(
                 "List orders from the EquiFlow database with optional filtering. "
-                "Supports filtering by status, ticker symbol, and date range. "
+                "Supports filtering by userId, status, ticker symbol, and date range. "
                 "Returns paginated results sorted by createdAt descending. "
-                "Use this to find a real order_id before calling get_order or query_audit_log."
+                "Use size=100 and paginate with the page param for bulk scans."
             ),
             inputSchema={
                 "type": "object",
                 "properties": {
+                    "userId": {
+                        "type": "string",
+                        "description": "Filter by user UUID",
+                    },
                     "status": {
                         "type": "string",
                         "enum": [
@@ -123,7 +127,7 @@ async def list_tools() -> list[Tool]:
                     },
                     "size": {
                         "type": "integer",
-                        "description": "Page size (default 25)",
+                        "description": "Page size (default 25, use 100 for bulk scans)",
                     },
                 },
                 "required": [],

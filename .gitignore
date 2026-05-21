@@ -49,3 +49,8 @@ memory/
 
 # Learning notes
 LEARNING.md
+
+# Agent scenario runtime artifacts
+equiflow-mcp/scenario_pairs.json
+equiflow-mcp/agent_findings.json
+equiflow-mcp/__pycache__/

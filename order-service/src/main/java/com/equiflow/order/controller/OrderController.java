@@ -124,7 +124,7 @@ public class OrderController {
     }
 
     @GetMapping("/internal/all")
-    @Operation(summary = "List all orders across all users (internal use by compliance agent)")
+    @Operation(summary = "List all orders across all users (internal use by agents)")
     public ResponseEntity<Page<OrderResponse>> listAllOrders(
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             @RequestParam(required = false) LocalDate from,
@@ -132,10 +132,11 @@ public class OrderController {
             @RequestParam(required = false) LocalDate to,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String ticker,
+            @RequestParam(required = false) UUID userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "25") int size) {
         PageRequest pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return ResponseEntity.ok(orderService.listOrders(from, to, status, ticker, null, pageable));
+        return ResponseEntity.ok(orderService.listOrders(from, to, status, ticker, userId, pageable));
     }
 
     @PostMapping("/internal/stop-loss/evaluate")
