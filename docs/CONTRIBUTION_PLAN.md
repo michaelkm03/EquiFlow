@@ -1144,17 +1144,18 @@ mvn verify -pl ledger-service
 
 ## Backlog — AI Agents
 
-Three agents, one per invocation pattern. Each builds on the existing `run_agent()` loop in `equiflow-mcp/agent.py` and the handler registry in `equiflow_data_server.py`. The loop itself does not change — only the system prompt, tools, and trigger wiring differ.
+Each agent builds on the existing `run_agent()` loop in `equiflow-mcp/loop.py` and the handler registry in `equiflow_data_server.py`. The loop itself does not change — only the system prompt, tools, and trigger wiring differ.
 
 | Status | Ticket | Task | Points | Priority |
 |--------|--------|------|--------|----------|
 | ✅ | <nobr>[EQ-130](#eq-130--on-demand-compliance-breach-summary-agent)</nobr> | On-Demand Compliance Breach Summary Agent | 3 | P1 |
 | ⚪ | <nobr>[EQ-133](#eq-133--agent-test-suite-compliance-agent)</nobr> | Agent Test Suite — Compliance Agent | 3 | P1 — depends on EQ-130 |
-| ⚪ | <nobr>[EQ-131](#eq-131--scheduled-eod-settlement-reconciliation-agent)</nobr> | Scheduled EOD Settlement Reconciliation Agent | 5 | P1 |
-| ⚪ | <nobr>[EQ-134](#eq-134--agent-test-suite-settlement-reconciliation-agent)</nobr> | Agent Test Suite — Settlement Reconciliation Agent | 3 | P1 — depends on EQ-131 |
+| ~~⚪~~ | ~~EQ-131 · Scheduled EOD Settlement Reconciliation Agent~~ | ~~removed — problem already solved by existing `/settlement/pending` endpoint~~ | ~~5~~ | ~~P1~~ |
+| ⚪ | <nobr>[EQ-134](#eq-134--agent-test-suite-settlement-reconciliation-agent)</nobr> | Agent Test Suite — Settlement Reconciliation Agent | 3 | P1 — reserved for future settlement agent |
 | ⚪ | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 |
 | ⚪ | <nobr>[EQ-135](#eq-135--agent-test-suite-order-failure-escalation-agent)</nobr> | Agent Test Suite — Order Failure Escalation Agent | 3 | P1 — depends on EQ-132 |
 | ✅ | <nobr>[EQ-136](#eq-136--duplicate-order-detection-agent)</nobr> | Duplicate Order Detection Agent | 5 | P1 |
+| ✅ | <nobr>[EQ-137](#eq-137--agent-visualization-frontend)</nobr> | Agent Visualization Frontend — React + FastAPI SSE live step timeline | 5 | P1 |
 
 ---
 
@@ -1217,76 +1218,6 @@ list_orders(status=REJECTED, from=today)
 
 ---
 
-### EQ-131 · Scheduled: EOD Settlement Reconciliation Agent
-| Epic | Type | Points | Priority |
-|------|------|--------|----------|
-| AI Agents | Feature | 5 | P1 |
-
-**Invocation pattern:** Scheduled — runs automatically at 4:05 PM ET every trading day after the settlement scheduler has run.
-
-**Problem it solves:** After market close, settlement-service marks filled orders as SETTLED. Any that remain PENDING_SETTLEMENT after the scheduler runs represent failures. Today no one knows about them until a trader complains. This agent surfaces them proactively.
-
-**Trigger wiring:**
-```bash
-# cron entry (crontab or Windows Task Scheduler)
-# runs at 4:05 PM ET Mon–Fri
-5 16 * * 1-5 python /path/to/equiflow-mcp/settlement_agent.py
-```
-
-**Tools required:**
-
-| Tool | Status | Notes |
-|------|--------|-------|
-| `list_orders` | Existing | Filter by `status=FILLED`, `from=today` |
-| `get_order` | Existing | Retrieve settlement status and saga ID |
-| `query_audit_log` | Existing | Check retry history for stuck settlements |
-| `get_ledger_account` | **New** | `GET /ledger/accounts/{userId}` — verify cash balance for accounts with pending settlements |
-| `list_settlements` | **New** | `GET /settlement/records?orderId={orderId}` — returns settlement record status and date |
-
-**New endpoints needed:**
-
-`GET /settlement/records?orderId={orderId}` on `settlement-service`
-- Returns: `{ orderId, status: "PENDING_SETTLEMENT" | "SETTLED", settlementDate, settledAt }`
-- Auth: BOT_OPERATOR role
-
-`GET /ledger/accounts/{userId}` already exists — confirm it's accessible to BOT_OPERATOR.
-
-**System prompt:**
-```
-You are an EquiFlow end-of-day settlement reconciliation agent.
-
-Today's market has closed. Your goal: identify any filled orders from today
-that have not yet settled and assess whether intervention is needed.
-
-For each unsettled order:
-1. Check its settlement record status
-2. Check the audit log for retry history
-3. Check the account's ledger balance
-
-Your final response must state:
-- How many orders settled successfully today
-- How many remain PENDING_SETTLEMENT (if any)
-- For each stuck order: order ID, failure reason, retry count, account balance
-- Recommended action: auto-retry eligible, needs manual credit, or escalate to ops
-
-If all orders settled cleanly, say so clearly.
-```
-
-**Branching logic:**
-```
-list_orders(status=FILLED, from=today)
-  → for each: list_settlements(order_id)
-    → if SETTLED → count as success
-    → if PENDING_SETTLEMENT:
-        query_audit_log(order_id)  → retry count, last attempt
-        get_ledger_account(user_id) → current balance
-        → classify: retriable | needs manual credit | escalate
-  → summarise
-```
-
-**File to create:** `equiflow-mcp/settlement_agent.py`
-
----
 
 ### EQ-132 · Triggered: Order Failure Escalation Agent
 | Epic | Type | Points | Priority |
@@ -1909,6 +1840,82 @@ python equiflow-mcp/compare_duplicates.py
 - [x] `compare_duplicates.py` reads both JSON files and shows ✓ FOUND / ✗ MISSED / ! EXTRA per pair with detection rate
 - [x] Agent correctly reports CLEAR when no duplicates exist in the window
 - [x] Agent paginates if total orders exceed the page size
+
+---
+
+### EQ-137 · Agent Visualization Frontend
+| Epic | Type | Points | Priority |
+|------|------|--------|----------|
+| AI Agents | Feature | 5 | P1 |
+
+**Problem it solves:**
+The three Claude API agents (compliance, duplicate detection, order triage) run exclusively from the CLI. There is no way to observe agent reasoning in real time — iteration steps, tool calls, tool results, and the final answer are only visible in terminal output. This makes the agents difficult to demo, hard to debug, and invisible to non-engineers.
+
+**What was built:**
+A full-stack agent visualization interface: a FastAPI SSE streaming backend that wraps all three existing agents, and a React + TypeScript + Tailwind frontend that renders each agent step as a live card timeline as events arrive.
+
+**Architecture:**
+
+```
+React (Vite) → fetch + ReadableStream → FastAPI SSE → streaming_loop.py → Claude API
+                                                     → call_tool → EquiFlow services
+```
+
+**New files:**
+
+| File | Purpose |
+|------|---------|
+| `equiflow-mcp/streaming_loop.py` | Async generator variant of `run_agent()` — yields typed events without breaking existing CLI agents |
+| `equiflow-mcp/api.py` | FastAPI app with `POST /api/run` SSE endpoint and `GET /api/agents` listing |
+| `frontend/` | Vite + React + TypeScript + Tailwind project |
+| `frontend/src/types.ts` | `AgentEvent` union type matching all SSE event shapes |
+| `frontend/src/components/AgentRunner.tsx` | Agent selector, question input, run/stop/clear controls, status bar |
+| `frontend/src/components/StepCard.tsx` | Renders a single agent event — iteration marker, tool call (collapsible JSON), tool result (collapsible JSON), final answer, error |
+
+**Modified files:**
+
+| File | Change |
+|------|--------|
+| `equiflow-mcp/requirements.txt` | Added `fastapi`, `uvicorn[standard]`, `sse-starlette` |
+| `frontend/vite.config.ts` | Added Tailwind plugin + `/api` proxy to `http://localhost:8000` |
+
+**Event types streamed:**
+
+| Event | Icon | Description |
+|-------|------|-------------|
+| `iteration_start` | 🔄 | New agent loop iteration beginning |
+| `tool_call` | 🔧 | Tool name + collapsible JSON input |
+| `tool_result` | ✅ | Tool name + collapsible JSON result |
+| `done` | 📋 | Final agent answer rendered in full |
+| `error` | ❌ | Agent error or iteration limit hit |
+
+**How to run:**
+
+```bash
+# Terminal 1 — FastAPI backend
+cd equiflow-mcp
+uvicorn api:app --reload --port 8000
+
+# Terminal 2 — React frontend
+cd frontend
+npm run dev
+# Open http://localhost:5173
+```
+
+**Design decisions:**
+- `streaming_loop.py` is a separate file — `loop.py` is untouched so all existing CLI agents continue to work unchanged
+- The FastAPI DISPATCH table is hard-coded per agent — each agent exposes only the tools it actually uses, matching the existing agent module structure
+- SSE via `ReadableStream` + manual line parsing (no `EventSource`) so the client can use `POST` with a JSON body rather than GET with query params
+- Tailwind dark theme (`bg-slate-800`, `bg-[#0f1117]`) to match a professional ops dashboard aesthetic
+
+**Acceptance Criteria:**
+- [x] `POST /api/run` with `{ agent: "duplicate", question: "..." }` streams iteration, tool call, tool result, and done events
+- [x] All three agents (compliance, duplicate, triage) selectable from the UI dropdown
+- [x] Each tool call card shows collapsible JSON input; each tool result card shows collapsible JSON result
+- [x] Run button starts streaming; Stop button cancels the reader; Clear resets the timeline
+- [x] Status bar shows animated pulse while running, completion count when done, error state on failure
+- [x] `streaming_loop.py` imports cleanly and does not modify `loop.py`
+- [x] `api.py` imports all three agent modules without error
 
 ---
 
