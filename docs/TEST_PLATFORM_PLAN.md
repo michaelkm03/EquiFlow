@@ -1,6 +1,6 @@
 # EquiFlow — Test Platform Plan
 **Role:** Senior Software Engineer — Test Platform
-**Status:** EQ-113a complete — COMPENSATING checkpoint in place | **Last Updated:** 2026-03-27
+**Status:** EQ-113a complete — COMPENSATING checkpoint in place | **Last Updated:** 2026-05-23
 
 > **Key facts verified in source before planning:**
 > - `failSaga()` now saves `COMPENSATING` to DB before resolving to `FAILED` — crash-safe checkpoint for EQ-113c recovery job (EQ-113a ✅)

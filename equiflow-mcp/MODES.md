@@ -30,9 +30,9 @@ Duplicate detection is a deterministic algorithm:
 1. Fetch all orders for the date range
 2. Group by `(userId, ticker, side, quantity, limitPrice, type)`
 3. For each group with >1 order, compute the time gap and assign suspicion:
-   - `< 5 s` → HIGH
-   - `5–30 s` → MEDIUM
-   - `> 30 s` → LOW
+   - `< 1 s` → HIGH
+   - `1–5 s` → MEDIUM
+   - `> 5 s` → LOW
 4. Emit `ESCALATE / REVIEW / CLEAR` verdict
 
 No judgment is required — the same inputs always produce the same output. Python is sufficient.
