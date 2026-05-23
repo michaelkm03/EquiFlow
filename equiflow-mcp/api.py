@@ -67,12 +67,6 @@ AGENTS = {
 
 SCRIPT_DIR = Path(__file__).parent
 
-SEED_SCRIPTS: dict[str, list[list[str]]] = {
-    "duplicate": [
-        [sys.executable, str(SCRIPT_DIR / "cleanup_scenario.py"), "--execute"],
-        [sys.executable, str(SCRIPT_DIR / "seed_duplicate_orders.py"), "--messages", "20", "--duration", "5000"],
-    ],
-}
 
 
 class RunRequest(BaseModel):
@@ -82,6 +76,8 @@ class RunRequest(BaseModel):
 
 class SeedRequest(BaseModel):
     agent: str
+    messages: int = 20
+    delay: str = "1s"
 
 
 @app.post("/api/run")
@@ -112,8 +108,16 @@ async def run_agent_endpoint(req: RunRequest):
 
 @app.post("/api/seed")
 async def seed_agent_endpoint(req: SeedRequest):
-    scripts = SEED_SCRIPTS.get(req.agent)
-    if not scripts:
+    if req.agent == "duplicate":
+        duration_ms = max(req.messages * 300, 3000)
+        scripts = [
+            [sys.executable, str(SCRIPT_DIR / "cleanup_scenario.py"), "--execute"],
+            [sys.executable, str(SCRIPT_DIR / "seed_duplicate_orders.py"),
+             "--messages", str(req.messages),
+             "--duration", str(duration_ms),
+             "--duplicate-delay", req.delay],
+        ]
+    else:
         async def no_seed_gen():
             yield {"data": json.dumps({"type": "error", "message": f"No seed script for agent: {req.agent}"})}
         return EventSourceResponse(no_seed_gen())

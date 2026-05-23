@@ -88,6 +88,8 @@ export function AgentRunner() {
   type SeedStatus = 'idle' | 'running' | 'done' | 'error'
   const [seedStatus, setSeedStatus] = useState<SeedStatus>('idle')
   const [seedLog, setSeedLog] = useState<{ phase?: string; lines: string[] }[]>([])
+  const [seedMessages, setSeedMessages] = useState(20)
+  const [seedDelay, setSeedDelay] = useState<'1s' | '10s' | '60s'>('1s')
   const seedBottomRef = useRef<HTMLDivElement>(null)
 
   const selectedAgent = AGENTS.find(a => a.id === selectedId)!
@@ -163,14 +165,15 @@ export function AgentRunner() {
     setStatus('idle')
   }
 
-  async function seed() {
+  async function seed(agentId: string) {
+    selectAgent(agentId)
     setSeedLog([])
     setSeedStatus('running')
 
     const res = await fetch('/api/seed', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent: selectedId }),
+      body: JSON.stringify({ agent: agentId, messages: seedMessages, delay: seedDelay }),
     })
 
     if (!res.ok || !res.body) {
@@ -241,29 +244,65 @@ export function AgentRunner() {
         </div>
 
         {AGENTS.map(agent => (
-          <button
-            key={agent.id}
-            onClick={() => agent.ready && selectAgent(agent.id)}
-            disabled={!agent.ready || status === 'running'}
-            className={[
-              'w-full text-left rounded-md border px-3 py-2.5 transition-all duration-150',
-              agent.ready
-                ? selectedId === agent.id
-                  ? 'border-green-500/50 bg-green-500/[0.04] text-white'
-                  : 'border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 cursor-pointer'
-                : 'border-zinc-900 bg-transparent text-zinc-700 cursor-not-allowed',
-            ].join(' ')}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium">{agent.label}</span>
-              {agent.ready
-                ? <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-sm bg-green-500/10 text-green-400 border border-green-500/20 tracking-widest font-mono">LIVE</span>
-                : <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-sm text-zinc-700 border border-zinc-800/80 tracking-widest font-mono">SOON</span>
-              }
-            </div>
-            <p className="text-[11px] mt-1 leading-relaxed text-zinc-600">{agent.description}</p>
-            <p className="text-[10px] mt-1.5 text-zinc-700 font-mono">{agent.ticket}</p>
-          </button>
+          <div key={agent.id}>
+            <button
+              onClick={() => agent.ready && selectAgent(agent.id)}
+              disabled={!agent.ready || status === 'running'}
+              className={[
+                'w-full text-left rounded-md border px-3 py-2.5 transition-all duration-150',
+                agent.ready
+                  ? selectedId === agent.id
+                    ? 'border-green-500/50 bg-green-500/[0.04] text-white'
+                    : 'border-zinc-800 bg-zinc-900/30 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200 cursor-pointer'
+                  : 'border-zinc-900 bg-transparent text-zinc-700 cursor-not-allowed',
+              ].join(' ')}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium">{agent.label}</span>
+                {agent.ready
+                  ? <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-sm bg-green-500/10 text-green-400 border border-green-500/20 tracking-widest font-mono">LIVE</span>
+                  : <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-sm text-zinc-700 border border-zinc-800/80 tracking-widest font-mono">SOON</span>
+                }
+              </div>
+              <p className="text-[11px] mt-1 leading-relaxed text-zinc-600">{agent.description}</p>
+              <p className="text-[10px] mt-1.5 text-zinc-700 font-mono">{agent.ticket}</p>
+            </button>
+
+            {agent.hasSeed && agent.ready && (
+              <div className="mt-0.5 rounded-md border border-zinc-800/70 bg-zinc-950/60 px-3 py-2">
+                <p className="text-[9px] font-mono text-zinc-700 uppercase tracking-widest mb-2">Seed data</p>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      value={seedMessages}
+                      onChange={e => setSeedMessages(Math.max(1, parseInt(e.target.value) || 1))}
+                      min={1}
+                      max={500}
+                      className="w-12 rounded-sm bg-zinc-900 border border-zinc-800 text-zinc-300 px-1.5 py-0.5 text-[11px] font-mono text-center focus:outline-none focus:border-zinc-600"
+                    />
+                    <span className="text-[10px] text-zinc-600 font-mono">msgs</span>
+                  </div>
+                  <select
+                    value={seedDelay}
+                    onChange={e => setSeedDelay(e.target.value as '1s' | '10s' | '60s')}
+                    className="rounded-sm bg-zinc-900 border border-zinc-800 text-zinc-400 px-1.5 py-0.5 text-[10px] font-mono focus:outline-none focus:border-zinc-600"
+                  >
+                    <option value="1s">HIGH</option>
+                    <option value="10s">MED</option>
+                    <option value="60s">LOW</option>
+                  </select>
+                  <button
+                    onClick={() => seed(agent.id)}
+                    disabled={seedStatus === 'running' || status === 'running'}
+                    className="ml-auto rounded-sm border border-zinc-700 hover:border-green-500/50 text-zinc-500 hover:text-green-400 disabled:opacity-30 disabled:cursor-not-allowed px-2 py-0.5 text-[10px] font-mono tracking-widest transition-colors"
+                  >
+                    {seedStatus === 'running' ? 'SEEDING…' : 'SEED'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         ))}
       </div>
 
@@ -320,15 +359,6 @@ export function AgentRunner() {
           {events.length > 0 && status !== 'running' && (
             <button onClick={reset} className="rounded-md border border-zinc-800 hover:border-zinc-700 text-zinc-600 hover:text-zinc-400 px-4 py-2 text-xs transition-colors">
               Clear
-            </button>
-          )}
-          {selectedAgent.hasSeed && status !== 'running' && (
-            <button
-              onClick={seedStatus === 'running' ? undefined : seed}
-              disabled={seedStatus === 'running'}
-              className="rounded-md border border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 px-3 py-2 text-[11px] font-mono tracking-widest transition-colors"
-            >
-              {seedStatus === 'running' ? 'SEEDING…' : 'SEED'}
             </button>
           )}
         </div>
