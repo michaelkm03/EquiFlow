@@ -1,5 +1,8 @@
+import asyncio
 import json
+import sys
 from datetime import date
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -62,9 +65,23 @@ AGENTS = {
 }
 
 
+SCRIPT_DIR = Path(__file__).parent
+
+SEED_SCRIPTS: dict[str, list[list[str]]] = {
+    "duplicate": [
+        [sys.executable, str(SCRIPT_DIR / "cleanup_scenario.py"), "--execute"],
+        [sys.executable, str(SCRIPT_DIR / "seed_duplicate_orders.py"), "--messages", "20", "--duration", "5000"],
+    ],
+}
+
+
 class RunRequest(BaseModel):
     agent: str
     question: str
+
+
+class SeedRequest(BaseModel):
+    agent: str
 
 
 @app.post("/api/run")
@@ -91,6 +108,41 @@ async def run_agent_endpoint(req: RunRequest):
             yield {"data": json.dumps(event)}
 
     return EventSourceResponse(event_generator())
+
+
+@app.post("/api/seed")
+async def seed_agent_endpoint(req: SeedRequest):
+    scripts = SEED_SCRIPTS.get(req.agent)
+    if not scripts:
+        async def no_seed_gen():
+            yield {"data": json.dumps({"type": "error", "message": f"No seed script for agent: {req.agent}"})}
+        return EventSourceResponse(no_seed_gen())
+
+    phase_labels = ["Cleanup", "Seed"]
+
+    async def seed_generator():
+        for i, cmd in enumerate(scripts):
+            label = phase_labels[i] if i < len(phase_labels) else f"Step {i + 1}"
+            yield {"data": json.dumps({"type": "phase", "label": label})}
+
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            async for raw_line in proc.stdout:
+                text = raw_line.decode().rstrip()
+                if text:
+                    yield {"data": json.dumps({"type": "log", "line": text})}
+
+            rc = await proc.wait()
+            if rc != 0:
+                yield {"data": json.dumps({"type": "error", "message": f"{label} failed (exit {rc})"})}
+                return
+
+        yield {"data": json.dumps({"type": "done"})}
+
+    return EventSourceResponse(seed_generator())
 
 
 @app.get("/api/agents")

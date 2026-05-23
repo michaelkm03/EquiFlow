@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import type { AgentEvent } from '../types'
+import type { AgentEvent, SeedEvent } from '../types'
 import { Timeline } from './Timeline'
 
 interface AgentConfig {
@@ -10,6 +10,7 @@ interface AgentConfig {
   placeholder: string
   examples: string[]
   ready: boolean
+  hasSeed: boolean
 }
 
 const AGENTS: AgentConfig[] = [
@@ -24,6 +25,7 @@ const AGENTS: AgentConfig[] = [
       'Check for duplicate orders this week',
     ],
     ready: true,
+    hasSeed: true,
   },
   {
     id: 'compliance',
@@ -36,6 +38,7 @@ const AGENTS: AgentConfig[] = [
       'Which accounts have repeated wash-sale violations this week?',
     ],
     ready: true,
+    hasSeed: false,
   },
   {
     id: 'triage',
@@ -48,6 +51,7 @@ const AGENTS: AgentConfig[] = [
       'Why is order <UUID> stuck?',
     ],
     ready: true,
+    hasSeed: false,
   },
   {
     id: 'escalation',
@@ -57,6 +61,7 @@ const AGENTS: AgentConfig[] = [
     placeholder: '',
     examples: [],
     ready: false,
+    hasSeed: false,
   },
   {
     id: 'settlement',
@@ -66,6 +71,7 @@ const AGENTS: AgentConfig[] = [
     placeholder: '',
     examples: [],
     ready: false,
+    hasSeed: false,
   },
 ]
 
@@ -78,6 +84,11 @@ export function AgentRunner() {
   const [status, setStatus] = useState<RunStatus>('idle')
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<(() => void) | null>(null)
+
+  type SeedStatus = 'idle' | 'running' | 'done' | 'error'
+  const [seedStatus, setSeedStatus] = useState<SeedStatus>('idle')
+  const [seedLog, setSeedLog] = useState<{ phase?: string; lines: string[] }[]>([])
+  const seedBottomRef = useRef<HTMLDivElement>(null)
 
   const selectedAgent = AGENTS.find(a => a.id === selectedId)!
 
@@ -150,6 +161,73 @@ export function AgentRunner() {
     stop()
     setEvents([])
     setStatus('idle')
+  }
+
+  async function seed() {
+    setSeedLog([])
+    setSeedStatus('running')
+
+    const res = await fetch('/api/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent: selectedId }),
+    })
+
+    if (!res.ok || !res.body) {
+      setSeedStatus('error')
+      return
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.startsWith('data:')) continue
+        const raw = line.slice(5).trim()
+        if (!raw) continue
+        try {
+          const event: SeedEvent = JSON.parse(raw)
+          if (event.type === 'phase') {
+            setSeedLog(prev => [...prev, { phase: event.label, lines: [] }])
+          } else if (event.type === 'log') {
+            setSeedLog(prev => {
+              if (prev.length === 0) return [{ lines: [event.line] }]
+              const updated = [...prev]
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                lines: [...updated[updated.length - 1].lines, event.line],
+              }
+              return updated
+            })
+          } else if (event.type === 'done') {
+            setSeedStatus('done')
+          } else if (event.type === 'error') {
+            setSeedLog(prev => {
+              if (prev.length === 0) return [{ lines: [event.message] }]
+              const updated = [...prev]
+              updated[updated.length - 1] = {
+                ...updated[updated.length - 1],
+                lines: [...updated[updated.length - 1].lines, `ERROR: ${event.message}`],
+              }
+              return updated
+            })
+            setSeedStatus('error')
+          }
+          setTimeout(() => seedBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+        } catch {
+          // skip malformed
+        }
+      }
+    }
   }
 
   return (
@@ -244,6 +322,15 @@ export function AgentRunner() {
               Clear
             </button>
           )}
+          {selectedAgent.hasSeed && status !== 'running' && (
+            <button
+              onClick={seedStatus === 'running' ? undefined : seed}
+              disabled={seedStatus === 'running'}
+              className="rounded-md border border-zinc-700 hover:border-zinc-500 text-zinc-500 hover:text-zinc-300 disabled:opacity-40 px-3 py-2 text-[11px] font-mono tracking-widest transition-colors"
+            >
+              {seedStatus === 'running' ? 'SEEDING…' : 'SEED'}
+            </button>
+          )}
         </div>
 
         {/* Status bar */}
@@ -259,6 +346,33 @@ export function AgentRunner() {
           </div>
         )}
         {status === 'error' && <div className="text-xs text-red-400">Agent encountered an error</div>}
+
+        {/* Seed log */}
+        {seedLog.length > 0 && (
+          <div className="rounded-md bg-zinc-950 border border-zinc-800/60 p-3 max-h-52 overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-semibold font-mono tracking-widest uppercase text-zinc-600">
+                {seedStatus === 'running' ? 'Seeding data…' : seedStatus === 'done' ? '✓ Seed complete' : '✕ Seed failed'}
+              </p>
+              {seedStatus !== 'running' && (
+                <button onClick={() => { setSeedLog([]); setSeedStatus('idle') }} className="text-[10px] text-zinc-700 hover:text-zinc-500 transition-colors">
+                  dismiss
+                </button>
+              )}
+            </div>
+            {seedLog.map((block, bi) => (
+              <div key={bi} className="mb-2">
+                {block.phase && (
+                  <p className="text-[10px] text-zinc-600 font-mono uppercase tracking-widest mb-1">── {block.phase}</p>
+                )}
+                {block.lines.map((line, li) => (
+                  <p key={li} className="text-[11px] font-mono text-zinc-500 leading-relaxed whitespace-pre">{line}</p>
+                ))}
+              </div>
+            ))}
+            <div ref={seedBottomRef} />
+          </div>
+        )}
 
         {/* Timeline */}
         <div className="flex-1 overflow-y-auto flex flex-col pb-4">

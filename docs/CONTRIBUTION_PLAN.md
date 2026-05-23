@@ -3,7 +3,7 @@
 **Status:** Approved
 **Product Owner:** Claude
 **Engineering Lead:** Michael Montgomery
-**Last Updated:** 2026-03-27
+**Last Updated:** 2026-05-22
 
 ---
 
@@ -1866,11 +1866,11 @@ React (Vite) → fetch + ReadableStream → FastAPI SSE → streaming_loop.py �
 | File | Purpose |
 |------|---------|
 | `equiflow-mcp/streaming_loop.py` | Async generator variant of `run_agent()` — yields typed events without breaking existing CLI agents |
-| `equiflow-mcp/api.py` | FastAPI app with `POST /api/run` SSE endpoint and `GET /api/agents` listing |
+| `equiflow-mcp/api.py` | FastAPI app with `POST /api/run` SSE, `POST /api/seed` SSE, and `GET /api/agents` endpoints |
 | `frontend/` | Vite + React + TypeScript + Tailwind project |
-| `frontend/src/types.ts` | `AgentEvent` union type matching all SSE event shapes |
-| `frontend/src/components/AgentRunner.tsx` | Agent selector, question input, run/stop/clear controls, status bar |
-| `frontend/src/components/StepCard.tsx` | Renders a single agent event — iteration marker, tool call (collapsible JSON), tool result (collapsible JSON), final answer, error |
+| `frontend/src/types.ts` | `AgentEvent` and `SeedEvent` union types matching all SSE event shapes |
+| `frontend/src/components/AgentRunner.tsx` | Sidebar agent picker, question input, run/stop/clear controls, SEED button, seed log panel, status bar |
+| `frontend/src/components/Timeline.tsx` | Left-rail iteration timeline — numbered circles connected by a vertical rail, tool call/result rows with ├─/└─ connectors, collapsible JSON, terminal node |
 
 **Modified files:**
 
@@ -1878,16 +1878,26 @@ React (Vite) → fetch + ReadableStream → FastAPI SSE → streaming_loop.py �
 |------|--------|
 | `equiflow-mcp/requirements.txt` | Added `fastapi`, `uvicorn[standard]`, `sse-starlette` |
 | `frontend/vite.config.ts` | Added Tailwind plugin + `/api` proxy to `http://localhost:8000` |
+| `frontend/src/index.css` | Inter font (Google Fonts), `#09090b` background, tabular numerals, `-0.015em` letter-spacing |
 
-**Event types streamed:**
+**Agent event types (`AgentEvent`):**
 
-| Event | Icon | Description |
-|-------|------|-------------|
-| `iteration_start` | 🔄 | New agent loop iteration beginning |
-| `tool_call` | 🔧 | Tool name + collapsible JSON input |
-| `tool_result` | ✅ | Tool name + collapsible JSON result |
-| `done` | 📋 | Final agent answer rendered in full |
-| `error` | ❌ | Agent error or iteration limit hit |
+| Event | Description |
+|-------|-------------|
+| `iteration_start` | New agent loop iteration — rendered as a numbered circle on the rail |
+| `tool_call` | Tool name (violet code badge) + collapsible JSON input |
+| `tool_result` | Tool name + collapsible JSON result |
+| `done` | Final answer rendered as plain text below a `★` terminal node |
+| `error` | Error message below a `✕` terminal node |
+
+**Seed event types (`SeedEvent`):**
+
+| Event | Description |
+|-------|-------------|
+| `phase` | Phase label (Cleanup / Seed) — rendered as a section header in the log panel |
+| `log` | Raw stdout line from the subprocess |
+| `done` | Both phases completed successfully |
+| `error` | Subprocess exited non-zero — message shown in log panel |
 
 **How to run:**
 
@@ -1902,19 +1912,33 @@ npm run dev
 # Open http://localhost:5173
 ```
 
+**Seed button flow (Duplicate Detection agent only):**
+1. Click SEED — calls `POST /api/seed { agent: "duplicate" }`
+2. Backend runs `cleanup_scenario.py --execute` (removes all non-Flyway orders across 5 DBs, ~2s)
+3. Backend runs `seed_duplicate_orders.py --messages 20 --duration 5000` (~5s, 20 orders, 2 duplicates)
+4. Stdout from both scripts streams as SSE log lines to the UI log panel
+5. Log panel shows phase headers (── Cleanup / ── Seed) with live output beneath
+6. On completion: "✓ Seed complete" — run the agent to see today's duplicate orders
+
 **Design decisions:**
 - `streaming_loop.py` is a separate file — `loop.py` is untouched so all existing CLI agents continue to work unchanged
-- The FastAPI DISPATCH table is hard-coded per agent — each agent exposes only the tools it actually uses, matching the existing agent module structure
-- SSE via `ReadableStream` + manual line parsing (no `EventSource`) so the client can use `POST` with a JSON body rather than GET with query params
-- Tailwind dark theme (`bg-slate-800`, `bg-[#0f1117]`) to match a professional ops dashboard aesthetic
+- The FastAPI DISPATCH table is hard-coded per agent — each agent exposes only the tools it actually uses
+- SSE via `ReadableStream` + manual line parsing (no `EventSource`) so the client can use `POST` with a JSON body
+- `POST /api/seed` uses `asyncio.create_subprocess_exec` to stream script stdout line-by-line as SSE — no blocking
+- Modern finance UI: Inter font, `#09090b` background, single green accent (`green-500`), zinc palette, monospace badges — inspired by Robinhood/Fidelity design language
+- Left-rail timeline replaces flat cards — iterations are numbered circles connected by a vertical line, tool rows hang off with `├─`/`└─` connectors
+- `hasSeed: boolean` on each `AgentConfig` — SEED button only renders when true; currently only `duplicate` is `true`
 
 **Acceptance Criteria:**
-- [x] `POST /api/run` with `{ agent: "duplicate", question: "..." }` streams iteration, tool call, tool result, and done events
-- [x] All three agents (compliance, duplicate, triage) selectable from the UI dropdown
-- [x] Each tool call card shows collapsible JSON input; each tool result card shows collapsible JSON result
-- [x] Run button starts streaming; Stop button cancels the reader; Clear resets the timeline
-- [x] Status bar shows animated pulse while running, completion count when done, error state on failure
-- [x] `streaming_loop.py` imports cleanly and does not modify `loop.py`
+- [x] `POST /api/run` streams iteration, tool call, tool result, and done events for all three agents
+- [x] Sidebar shows all 5 agents with LIVE/SOON badges; SOON agents are disabled
+- [x] Timeline renders left-rail layout with numbered circles, connector lines, and collapsible JSON
+- [x] Run button starts streaming; Stop button cancels; Clear resets timeline
+- [x] Status bar shows green pulse while running, tool call count when done, error on failure
+- [x] SEED button visible only for Duplicate Detection agent
+- [x] SEED streams cleanup + seed log output in real time; log panel shows phase headers and raw lines
+- [x] Log panel auto-scrolls; shows ✓ / ✕ header and dismiss button on completion
+- [x] `streaming_loop.py` does not modify `loop.py`
 - [x] `api.py` imports all three agent modules without error
 
 ---
