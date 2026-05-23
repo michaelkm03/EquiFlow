@@ -105,9 +105,9 @@ class RunRequest(BaseModel):
 
 
 SEED_LEVELS = {
-    "HIGH": ("1s",  "4s"),
-    "MED":  ("10s", "25s"),
-    "LOW":  ("60s", "120s"),
+    "HIGH": "0.2s",
+    "MED":  "2s",
+    "LOW":  "7s",
 }
 
 class SeedRequest(BaseModel):
@@ -167,7 +167,7 @@ async def _local_duplicate_gen(question: str):
                                _dt.fromisoformat(orig["createdAt"])).total_seconds(), 2)
             except Exception:
                 gap_s = 0.0
-            suspicion = "HIGH" if gap_s < 5 else ("MEDIUM" if gap_s <= 30 else "LOW")
+            suspicion = "HIGH" if gap_s < 1 else ("MEDIUM" if gap_s <= 5 else "LOW")
             pairs.append({
                 "orig_id": orig["id"], "dup_id": dup["id"],
                 "user_id": orig.get("userId", ""),
@@ -278,7 +278,7 @@ def _run_script_streaming(cmd: list, label: str, loop: asyncio.AbstractEventLoop
 
 @app.post("/api/cleanup")
 async def cleanup_endpoint():
-    cmd = [sys.executable, str(SCRIPT_DIR / "cleanup_scenario.py"), "--execute"]
+    cmd = [sys.executable, "-u", str(SCRIPT_DIR / "cleanup_scenario.py"), "--execute"]
 
     async def cleanup_generator():
         loop = asyncio.get_running_loop()
@@ -302,14 +302,13 @@ async def cleanup_endpoint():
 @app.post("/api/seed")
 async def seed_agent_endpoint(req: SeedRequest):
     if req.agent == "duplicate":
-        min_delay, max_delay = SEED_LEVELS.get(req.level, SEED_LEVELS["HIGH"])
+        gap = SEED_LEVELS.get(req.level, SEED_LEVELS["HIGH"])
         duration_ms = max(req.messages * 300, 3000)
         cmd = [
-            sys.executable, str(SCRIPT_DIR / "seed_duplicate_orders.py"),
+            sys.executable, "-u", str(SCRIPT_DIR / "seed_duplicate_orders.py"),
             "--messages", str(req.messages),
             "--duration", str(duration_ms),
-            "--duplicate-delay", min_delay,
-            "--max-delay", max_delay,
+            "--duplicate-delay", gap,
         ]
     else:
         async def no_seed_gen():

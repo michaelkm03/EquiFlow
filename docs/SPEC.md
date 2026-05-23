@@ -1,8 +1,8 @@
 # EquiFlow — Product & Technical Specification
-**Version:** 1.2
+**Version:** 1.3
 **Status:** Approved
-**Last Updated:** 2026-03-25
-**Changes from v1.1:** Removed all cloud/deployment infrastructure. Project is local-only (Docker Compose). Replaced AWS services with local equivalents.
+**Last Updated:** 2026-05-23
+**Changes from v1.2:** Added AI Agent Monitoring Layer (EQ-136/137/138) — React frontend, FastAPI SSE server, three AI agents (Duplicate Detection, Compliance Monitor, Order Triage), seed/cleanup tooling.
 
 ---
 
@@ -10,7 +10,8 @@
 1. [Executive Summary](#1-executive-summary)
 2. [User Personas & Access Control](#2-user-personas--access-control)
 3. [System Architecture](#3-system-architecture)
-4. [Microservices — Detailed Breakdown](#4-microservices--detailed-breakdown)
+4. [AI Agent Monitoring Layer](#4-ai-agent-monitoring-layer)
+5. [Microservices — Detailed Breakdown](#5-microservices--detailed-breakdown)
    - 4.1 auth-service
    - 4.2 order-service
    - 4.3 market-data-service
@@ -50,6 +51,8 @@ The system simulates a production-grade brokerage backend with:
 Everything runs locally via **Docker Compose**. No AWS, no Kubernetes, no cloud deployment. CI runs via **GitHub Actions** on every push.
 
 **Scope (v1):** US equities (stocks) only. Mutual Funds, Bonds, and Slack notifications are out of scope for v1.
+
+**Agent layer (EQ-136/137/138):** A React + FastAPI monitoring layer sits alongside the backend. It is not part of the trading engine — it is an AI-powered operations console for investigating order anomalies. See [Section 4](#4-ai-agent-monitoring-layer).
 
 ---
 
@@ -144,7 +147,72 @@ graph TD
 
 ---
 
-## 4. Microservices — Detailed Breakdown
+## 4. AI Agent Monitoring Layer
+
+An AI-powered operations console for investigating order anomalies. Runs alongside the trading backend but is not part of it.
+
+### Components
+
+| Component | Path | Description |
+|---|---|---|
+| React frontend | `frontend/` | Vite + Tailwind CSS v4. Agent selector, prompt input, streaming timeline, seed/cleanup controls. |
+| FastAPI SSE server | `equiflow-mcp/api.py` | Bridges the frontend to Anthropic API and the trading backend. Streams events over SSE. |
+| Agent definitions | `equiflow-mcp/*_agent.py` | System prompt + tool list per agent. |
+| Data server | `equiflow-mcp/equiflow_data_server.py` | MCP tool handlers — HTTP calls to the trading gateway. |
+
+### Agents
+
+| Agent | Ticket | Description |
+|---|---|---|
+| Duplicate Detection | EQ-136 | Groups today's orders by `(userId, ticker, side, quantity, limitPrice, type)`. Classifies pairs as HIGH/MEDIUM/LOW by time gap. Emits ESCALATE / REVIEW / CLEAR verdict. |
+| Compliance Monitor | EQ-136 | Surfaces wash-sale and insufficient-funds violations. Identifies repeat offenders. |
+| Order Triage | EQ-136 | Investigates stuck or failed orders by inspecting saga state and audit trail. |
+
+### Suspicion Thresholds (Duplicate Detection)
+
+| Level | Gap |
+|---|---|
+| HIGH | < 1 s |
+| MEDIUM | 1–5 s |
+| LOW | > 5 s |
+
+### Run Modes
+
+See `equiflow-mcp/MODES.md` for full details.
+
+| Mode | What runs | Use for |
+|---|---|---|
+| LIVE | Real Anthropic API + real DB | Demos, production parity |
+| LOCAL | Python logic + real DB (no LLM) | Duplicate Detection only — day-to-day dev |
+| MOCK | Static JSONL fixture replay | Pure UI work, no backend needed |
+
+### Seed & Cleanup
+
+Seed buttons (HIGH / MED / LOW) live inside the Duplicate Detection agent card. Cleanup is in the sidebar footer and removes all non-Flyway test data from every service DB.
+
+| Seed Level | Target gap | Expected suspicion |
+|---|---|---|
+| HIGH | 0.2 s | All pairs → HIGH |
+| MED | 2 s | All pairs → MEDIUM |
+| LOW | 7 s | All pairs → LOW |
+
+### Starting the Agent Layer
+
+```bash
+# Backend must already be running (docker-compose up)
+cd equiflow-mcp
+pip install -r requirements.txt
+uvicorn api:app --reload --port 8000
+
+# Frontend
+cd frontend
+npm install
+npm run dev   # http://localhost:5173
+```
+
+---
+
+## 5. Microservices — Detailed Breakdown
 
 ---
 
