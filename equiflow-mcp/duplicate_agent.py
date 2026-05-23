@@ -9,94 +9,46 @@ from loop import run_agent
 from equiflow_data_server import handle_list_orders
 
 SYSTEM_TEMPLATE = """
-You are an EquiFlow duplicate order detection agent. Today's date is {today}.
+You are an EquiFlow duplicate order detection agent. Today is {today}.
 
-Your goal: identify orders that appear to be duplicates — same user, ticker, side,
-quantity, limitPrice, and type — placed within a short time window.
+Duplicate: two or more orders with identical (userId, ticker, side, quantity, limitPrice, type) but different IDs.
 
-A duplicate is two or more orders with identical fields (userId, ticker, side,
-quantity, limitPrice, type) but different order IDs.
-
-Suspicion levels based on time between the first and last order in a duplicate group:
-- HIGH:   < 5 seconds apart   — almost certainly accidental (double-click, client retry)
-- MEDIUM: 5–30 seconds apart  — possible retry or API glitch
-- LOW:    > 30 seconds apart  — may be intentional; flag for human review
+Suspicion by gap between earliest and latest order in a group:
+- HIGH:   < 5 s
+- MEDIUM: 5-30 s
+- LOW:    > 30 s
 
 Steps:
-1. Call list_orders with the date range from the question (default to today).
-   Use size=100. If the response shows more pages exist, call list_orders again
-   with page=1, page=2, etc. until all orders are retrieved.
-2. Group orders by (userId, ticker, side, quantity, limitPrice, type).
-3. For each group with more than one order, calculate the time delta between
-   the earliest and latest order and assign a suspicion level.
+1. Call list_orders for the date range in the question (default today). Use size=100; if last=false, paginate with page=1, 2... until last=true.
+2. Group by (userId, ticker, side, quantity, limitPrice, type).
+3. For each group with >1 order, compute gap and assign suspicion.
 
-Your final response must include:
-- Total duplicate pairs found (0 means clean)
-- A duplicate pairs table with exactly these columns (pipe-separated, padded for alignment):
-    User | Ticker | Side | Qty | Price | Gap | Suspicion | Original UUID | Duplicate UUID
-  One row per duplicate pair. Always include both UUIDs so results can be cross-referenced with the seed script output.
-- Which users appear in more than one duplicate group (repeat offenders)
-- Overall assessment:
-    CLEAR    — no duplicates found
-    REVIEW   — MEDIUM or LOW pairs only
-    ESCALATE — at least one HIGH pair (both orders may execute)
-
-Always include order UUIDs in the table — they are required for cross-referencing with the seed script summary.
-Do not speculate on intent beyond what the time delta and fields suggest.
-If no orders are found for the period, say so clearly.
-
-After your human-readable report, append this machine-readable block exactly as shown
-(keep the tag names unchanged; output valid JSON):
+End your reply with this block (valid JSON, tags unchanged):
 
 <findings_json>
-[
-  {{
-    "orig_id":   "<UUID of the earlier order>",
-    "dup_id":    "<UUID of the later order>",
-    "user_id":   "<userId field from the order>",
-    "ticker":    "<ticker>",
-    "side":      "<BUY or SELL>",
-    "qty":       "<quantity as a plain number, e.g. 25>",
-    "price":     "<limitPrice as a plain decimal, e.g. 588.31>",
-    "gap_s":     <float seconds between the two orders>,
-    "suspicion": "<HIGH, MEDIUM, or LOW>"
-  }}
-]
+{{
+  "verdict": "<CLEAR|REVIEW|ESCALATE>",
+  "total_orders": <int>,
+  "pairs": [
+    {{"orig_id":"<UUID>","dup_id":"<UUID>","user_id":"<userId>","ticker":"<t>","side":"<BUY|SELL>","qty":"<quantity>","price":"<limitPrice>","gap_s":<float>,"suspicion":"<HIGH|MEDIUM|LOW>"}}
+  ]
+}}
 </findings_json>
 
-One object per duplicate pair. Output [] if no duplicates were found.
+Verdict: ESCALATE if any HIGH, REVIEW if MEDIUM/LOW only, CLEAR if none. pairs=[] if no duplicates.
 """
 
 TOOLS = [
     {
         "name": "list_orders",
-        "description": (
-            "List orders from the EquiFlow database with optional filtering. "
-            "Supports filtering by userId, status, ticker, and date range. "
-            "Returns paginated results sorted by createdAt descending. "
-            "Use size=100 and the page param to retrieve large result sets."
-        ),
+        "description": "List all orders paginated. Use size=100; check last field to paginate.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "userId": {
-                    "type": "string",
-                    "description": "Filter by user UUID",
-                },
-                "status": {
-                    "type": "string",
-                    "enum": [
-                        "PENDING", "COMPLIANCE_CHECK", "OPEN", "FILLED",
-                        "PARTIALLY_FILLED", "CANCELLED", "REJECTED",
-                        "FAILED", "PENDING_TRIGGER", "TRIGGERED",
-                    ],
-                    "description": "Filter by order status",
-                },
-                "ticker": {"type": "string", "description": "Filter by ticker symbol (e.g. AAPL)"},
-                "from":   {"type": "string", "description": "Start date YYYY-MM-DD"},
-                "to":     {"type": "string", "description": "End date YYYY-MM-DD"},
-                "page":   {"type": "integer", "description": "Page number (0-based, default 0)"},
-                "size":   {"type": "integer", "description": "Page size (default 25, use 100 for bulk scans)"},
+                "from": {"type": "string", "description": "Start date YYYY-MM-DD"},
+                "to":   {"type": "string", "description": "End date YYYY-MM-DD"},
+                "page": {"type": "integer", "description": "0-based page number"},
+                "size": {"type": "integer", "description": "Page size (use 100)"},
             },
             "required": [],
         },

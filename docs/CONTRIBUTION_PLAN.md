@@ -1780,13 +1780,15 @@ Prices are random per run — table shows structure only.
 
 Up to 10 pairs — all HIGH → agent outputs **ESCALATE**.
 
-**Scenario variants:**
+**Scenario variants (UI presets → randomised delay ranges):**
 
-| `--duplicate-delay` | Gap | Suspicion | Expected assessment |
-|---|---|---|---|
-| `1s` (default) | <5s | HIGH | ESCALATE |
-| `10s` | 5–30s | MEDIUM | REVIEW |
-| `60s` | >30s | LOW | REVIEW |
+| UI button | `--duplicate-delay` | `--max-delay` | Gap range (random per pair) | Suspicion | Expected assessment |
+|---|---|---|---|---|---|
+| HIGH | `1s` | `4s` | 1s–4s | HIGH | ESCALATE |
+| MED | `10s` | `25s` | 10s–25s | MEDIUM | REVIEW |
+| LOW | `60s` | `120s` | 60s–120s | LOW | REVIEW |
+
+Each duplicate pair gets an independently drawn `random.uniform(min, max)` gap — the seed does not use a fixed delay.
 
 Unique orders sent = `X * (1 - Z/100)`. Total messages sent = X.
 Seed script writes `scenario_pairs.json` on completion; agent writes `agent_findings.json`. Both are gitignored runtime artifacts.
@@ -1865,39 +1867,54 @@ React (Vite) → fetch + ReadableStream → FastAPI SSE → streaming_loop.py �
 
 | File | Purpose |
 |------|---------|
-| `equiflow-mcp/streaming_loop.py` | Async generator variant of `run_agent()` — yields typed events without breaking existing CLI agents |
-| `equiflow-mcp/api.py` | FastAPI app with `POST /api/run` SSE, `POST /api/seed` SSE, and `GET /api/agents` endpoints |
+| `equiflow-mcp/streaming_loop.py` | Async generator variant of `run_agent()` — yields typed events, emits `token_usage` per iteration, uses `client.messages.stream()` context manager for large `max_tokens` |
+| `equiflow-mcp/api.py` | FastAPI app with `POST /api/run` (mode: live/local/mock), `POST /api/seed`, `POST /api/cleanup`, and `GET /api/agents` endpoints; includes `_local_duplicate_gen` Python duplicate logic |
+| `equiflow-mcp/MODES.md` | Reference table: LIVE vs LOCAL vs MOCK — what runs, cost, per-agent support, fixture format, event schema |
+| `equiflow-mcp/fixtures/duplicate.jsonl` | Hand-crafted MOCK fixture — 3 duplicate pairs (AAPL HIGH, MSFT HIGH, TSLA LOW), ESCALATE verdict, ready to replay without credits |
 | `frontend/` | Vite + React + TypeScript + Tailwind project |
-| `frontend/src/types.ts` | `AgentEvent` and `SeedEvent` union types matching all SSE event shapes |
-| `frontend/src/components/AgentRunner.tsx` | Sidebar agent picker, question input, run/stop/clear controls, SEED button, seed log panel, status bar |
-| `frontend/src/components/Timeline.tsx` | Left-rail iteration timeline — numbered circles connected by a vertical rail, tool call/result rows with ├─/└─ connectors, collapsible JSON, terminal node |
+| `frontend/src/types.ts` | `AgentEvent` union (iteration_start, tool_call, tool_result, token_usage, done, error) + `SeedEvent` |
+| `frontend/src/components/AgentRunner.tsx` | Three-segment `[LIVE][LOCAL][MOCK]` mode toggle; agent picker; question input; run/stop/clear; seed log panel; status bar with live token counts |
+| `frontend/src/components/Timeline.tsx` | Left-rail iteration timeline; `ResultPanel` renders structured findings table (verdict banner, duplicate pairs, repeat offenders) from `findings_json` object |
 
 **Modified files:**
 
 | File | Change |
 |------|--------|
+| `equiflow-mcp/duplicate_agent.py` | Slimmed system prompt (~450 tokens removed); `findings_json` changed from array to object `{verdict, total_orders, pairs}` |
+| `equiflow-mcp/streaming_loop.py` | Switched to `AsyncAnthropic` + `client.messages.stream()` to support `max_tokens=32000`; emits `token_usage` events |
+| `equiflow-mcp/seed_duplicate_orders.py` | All Unicode → ASCII; ASCII progress bar; `--max-delay` arg added |
+| `equiflow-mcp/cleanup_scenario.py` | Fixed table name `compliance_results` → `compliance_checks`; removed stale `account_holds` references; all Unicode → ASCII |
 | `equiflow-mcp/requirements.txt` | Added `fastapi`, `uvicorn[standard]`, `sse-starlette` |
 | `frontend/vite.config.ts` | Added Tailwind plugin + `/api` proxy to `http://localhost:8000` |
-| `frontend/src/index.css` | Inter font (Google Fonts), `#09090b` background, tabular numerals, `-0.015em` letter-spacing |
+| `frontend/src/index.css` | Background `#f0f3f5`, tabular numerals, `-0.015em` letter-spacing |
+
+**Run modes (three-way toggle):**
+
+| Mode | What runs | Cost | Supported agents |
+|------|-----------|------|-----------------|
+| **LIVE** | Real DB + real Anthropic API; auto-saves fixture | Tokens per run | All three |
+| **LOCAL** | Real DB + Python duplicate logic; no Anthropic | Free | Duplicate Detection only |
+| **MOCK** | Fixture replay from `fixtures/{agent}.jsonl`; no DB or API | Free | All three (fixture required) |
+
+See `equiflow-mcp/MODES.md` for full per-agent support matrix and fixture format.
 
 **Agent event types (`AgentEvent`):**
 
-| Event | Description |
-|-------|-------------|
-| `iteration_start` | New agent loop iteration — rendered as a numbered circle on the rail |
-| `tool_call` | Tool name (violet code badge) + collapsible JSON input |
-| `tool_result` | Tool name + collapsible JSON result |
-| `done` | Final answer rendered as plain text below a `★` terminal node |
-| `error` | Error message below a `✕` terminal node |
+| Event | Fields | Description |
+|-------|--------|-------------|
+| `iteration_start` | `iteration` | New loop iteration — numbered circle on the rail |
+| `tool_call` | `name`, `input` | Tool name + collapsible JSON input |
+| `tool_result` | `name`, `result` | Tool name + collapsible JSON result |
+| `token_usage` | `iteration`, `input_tokens`, `output_tokens` | Per-iteration token counts (LIVE only) |
+| `done` | `answer` | Final answer — rendered as structured findings table or narrative |
+| `error` | `message` | Error message below `✕` terminal node |
 
-**Seed event types (`SeedEvent`):**
+**Token optimizations applied:**
 
-| Event | Description |
-|-------|-------------|
-| `phase` | Phase label (Cleanup / Seed) — rendered as a section header in the log panel |
-| `log` | Raw stdout line from the subprocess |
-| `done` | Both phases completed successfully |
-| `error` | Subprocess exited non-zero — message shown in log panel |
+- System prompt slimmed from ~650 to ~200 tokens (removed table format, redundant narrative)
+- Tool schema: removed unused filter fields (`userId`, `ticker`, `status`)
+- Tool result slimming (`_list_orders_slim`): 8 essential fields only, truncated `createdAt[:19]`, compact JSON separators, stripped pagination metadata
+- `findings_json` changed from array to object so verdict and order count don't require narrative regex parsing on the frontend
 
 **How to run:**
 
@@ -1912,22 +1929,31 @@ npm run dev
 # Open http://localhost:5173
 ```
 
-**Seed button flow (Duplicate Detection agent only):**
-1. Click SEED — calls `POST /api/seed { agent: "duplicate" }`
-2. Backend runs `cleanup_scenario.py --execute` (removes all non-Flyway orders across 5 DBs, ~2s)
-3. Backend runs `seed_duplicate_orders.py --messages 20 --duration 5000` (~5s, 20 orders, 2 duplicates)
-4. Stdout from both scripts streams as SSE log lines to the UI log panel
-5. Log panel shows phase headers (── Cleanup / ── Seed) with live output beneath
-6. On completion: "✓ Seed complete" — run the agent to see today's duplicate orders
+**Seed section (global — top of sidebar):**
+
+A "Test Data" panel sits above the agent list in the sidebar and is not tied to any single agent card. It shows three buttons (HIGH / MED / LOW) that always seed the Duplicate Detection scenario. Clicking any button also navigates to the Duplicate Detection agent.
+
+**Seed button flow:**
+1. Click HIGH / MED / LOW — calls `POST /api/seed { agent: "duplicate", level: "HIGH"|"MED"|"LOW" }`
+2. Backend maps level to a delay range: HIGH→1s–4s, MED→10s–25s, LOW→60s–120s
+3. Backend runs `cleanup_scenario.py --execute` (removes all non-Flyway orders across 5 DBs, ~2s)
+4. Backend runs `seed_duplicate_orders.py --messages 20 --duration 5000 --duplicate-delay <min> --max-delay <max>`
+5. Each duplicate pair sleeps `random.uniform(min, max)` seconds — gap varies per pair within the range
+6. Stdout from both scripts streams as SSE log lines to the UI log panel
+7. Log panel shows phase headers (── Cleanup / ── Seed) with live output beneath
+8. On completion: "✓ Seed complete" — run the agent to see today's duplicate orders
 
 **Design decisions:**
 - `streaming_loop.py` is a separate file — `loop.py` is untouched so all existing CLI agents continue to work unchanged
 - The FastAPI DISPATCH table is hard-coded per agent — each agent exposes only the tools it actually uses
 - SSE via `ReadableStream` + manual line parsing (no `EventSource`) so the client can use `POST` with a JSON body
-- `POST /api/seed` uses `asyncio.create_subprocess_exec` to stream script stdout line-by-line as SSE — no blocking
-- Modern finance UI: Inter font, `#09090b` background, single green accent (`green-500`), zinc palette, monospace badges — inspired by Robinhood/Fidelity design language
-- Left-rail timeline replaces flat cards — iterations are numbered circles connected by a vertical line, tool rows hang off with `├─`/`└─` connectors
-- `hasSeed: boolean` on each `AgentConfig` — SEED button only renders when true; currently only `duplicate` is `true`
+- `POST /api/seed` streams script stdout line-by-line as SSE — no blocking
+- `client.messages.stream()` context manager required by Anthropic SDK when `max_tokens > 10,000` — switched from `messages.create()` to satisfy this constraint
+- THREE-WAY MODE TOGGLE: LIVE (bright teal), LOCAL (dark teal), MOCK (amber) — distinct colors encode the execution model at a glance
+- LOCAL mode replaces the LLM with a pure Python `defaultdict` grouping + `datetime.fromisoformat` gap calculation — exact output for duplicate detection which is a deterministic algorithm
+- MOCK mode replays JSONL fixtures with time gaps capped at 2s for snappy playback; LIVE runs auto-save a fresh fixture on completion
+- `findings_json` is now a structured object (not array) — `ResultPanel` parses verdict + pairs directly without regex scraping the narrative
+- Modern finance UI: `#f0f3f5` background, teal accent (`#0b7a75`/`#19535f`), amber for warning states, zinc palette, monospace badges
 
 **Acceptance Criteria:**
 - [x] `POST /api/run` streams iteration, tool call, tool result, and done events for all three agents
@@ -1935,11 +1961,17 @@ npm run dev
 - [x] Timeline renders left-rail layout with numbered circles, connector lines, and collapsible JSON
 - [x] Run button starts streaming; Stop button cancels; Clear resets timeline
 - [x] Status bar shows green pulse while running, tool call count when done, error on failure
-- [x] SEED button visible only for Duplicate Detection agent
+- [x] Seed section is a global control at the top of the sidebar (not per-agent); HIGH / MED / LOW buttons always seed the duplicate scenario and navigate to the Duplicate Detection agent
 - [x] SEED streams cleanup + seed log output in real time; log panel shows phase headers and raw lines
 - [x] Log panel auto-scrolls; shows ✓ / ✕ header and dismiss button on completion
 - [x] `streaming_loop.py` does not modify `loop.py`
 - [x] `api.py` imports all three agent modules without error
+- [x] Three-way `[LIVE][LOCAL][MOCK]` mode toggle; mode sent in request body
+- [x] LOCAL mode runs Python duplicate detection against real DB — no Anthropic credits consumed
+- [x] MOCK mode replays fixture from `fixtures/{agent}.jsonl`; error shown if no fixture exists
+- [x] Token usage (`N in / N out tokens`) displayed in status bar for LIVE runs
+- [x] LIVE runs auto-save fixture to `fixtures/{agent}.jsonl` on completion
+- [x] `findings_json` structured object parsed into verdict banner + findings table + repeat offenders panel
 
 ---
 

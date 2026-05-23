@@ -398,6 +398,24 @@ equiflow/
 ├── audit-service/        # Append-only audit log
 ├── saga-orchestrator/    # Distributed transaction coordinator
 ├── surge-simulator/      # Chaos engineering
+├── equiflow-mcp/         # AI agent layer (Python, FastAPI, Claude API)
+│   ├── api.py            # FastAPI server — /api/run, /api/seed, /api/cleanup
+│   ├── agent.py          # Order triage agent
+│   ├── compliance_agent.py
+│   ├── duplicate_agent.py
+│   ├── streaming_loop.py # Reusable async agent loop (SSE)
+│   ├── equiflow_data_server.py  # Tool handlers + MCP server
+│   ├── seed_duplicate_orders.py
+│   ├── cleanup_scenario.py
+│   ├── compare_duplicates.py
+│   ├── MODES.md          # LIVE / LOCAL / MOCK run mode reference
+│   └── fixtures/         # JSONL replay fixtures for MOCK mode
+│       └── duplicate.jsonl
+├── frontend/             # Agent visualization UI (React + Vite + Tailwind)
+│   └── src/
+│       ├── components/AgentRunner.tsx
+│       ├── components/Timeline.tsx
+│       └── types.ts
 ├── tests/
 │   ├── e2e/              # Playwright API tests
 │   └── performance/      # JMeter load tests
@@ -460,6 +478,8 @@ Open Docker Desktop → Settings → Resources → increase Memory to at least *
 | Reporting | Allure |
 | Build | Maven 3.9 (multi-module) |
 | Runtime | Docker + Docker Compose |
+| AI Agents | Python 3.11, Claude API (Anthropic), FastAPI, SSE |
+| Agent UI | React 18, TypeScript, Vite, Tailwind CSS v4 |
 
 ---
 
@@ -684,29 +704,30 @@ Prices are random per run — the table below shows structure only.
 
 Up to 10 pairs — all HIGH → agent outputs **ESCALATE**. (Actual count may be 9 if a duplicate position fires before that user's first unique order.)
 
-**Scenario variants:**
+**Scenario variants (randomized delay per pair):**
 
-| `--duplicate-delay` | Gap | Suspicion | Expected assessment |
+Each duplicate pair sleeps a random amount within the level's range — gaps vary across pairs rather than being uniform.
+
+| Level | Delay range per pair | Suspicion | Expected assessment |
 |---|---|---|---|
-| `1s` (default) | <5s | HIGH | ESCALATE |
-| `10s` | 5–30s | MEDIUM | REVIEW |
-| `60s` | >30s | LOW | REVIEW |
+| HIGH | 1s–4s (random) | HIGH | ESCALATE |
+| MED | 10s–25s (random) | MEDIUM | REVIEW |
+| LOW | 60s–120s (random) | LOW | REVIEW |
 
-**Run it:**
+**Run via CLI:**
 
 ```bash
 # Requires: docker-compose up + MARKET_HOURS_BYPASS=true in .env
 
-# 0. Clean previous test data (if re-running)
+# 0. Clean previous test data (run any time between scenarios)
 python equiflow-mcp/cleanup_scenario.py --execute
 
 # 1. Seed — writes scenario_pairs.json on completion
-python equiflow-mcp/seed_duplicate_orders.py               # 100 msgs, 1s delay → ESCALATE
-python equiflow-mcp/seed_duplicate_orders.py --messages 10 --duplicate-pct 10  # quick 10-msg run
-
-# MEDIUM / LOW variants
-python equiflow-mcp/seed_duplicate_orders.py --duplicate-delay 10s
-python equiflow-mcp/seed_duplicate_orders.py --duplicate-delay 60s
+#    --duplicate-delay sets min gap; --max-delay sets max (random per pair)
+python equiflow-mcp/seed_duplicate_orders.py                                    # HIGH: 1s–4s
+python equiflow-mcp/seed_duplicate_orders.py --duplicate-delay 10s --max-delay 25s   # MED
+python equiflow-mcp/seed_duplicate_orders.py --duplicate-delay 60s --max-delay 120s  # LOW
+python equiflow-mcp/seed_duplicate_orders.py --messages 10 --duplicate-pct 10        # quick run
 
 # 2. Run the agent — writes agent_findings.json on completion
 python equiflow-mcp/duplicate_agent.py "Scan today's orders for duplicates"
@@ -714,6 +735,68 @@ python equiflow-mcp/duplicate_agent.py "Scan today's orders for duplicates"
 # 3. Reconcile seed vs agent
 python equiflow-mcp/compare_duplicates.py
 ```
+
+**Run via Agent UI** (see [Agent Visualization Frontend](#agent-visualization-frontend)):
+- Click **Cleanup** to wipe test data
+- Click **HIGH**, **MED**, or **LOW** to seed — runs can be stacked without cleanup between them
+- Switch to "Duplicate Detection" and hit **RUN**
+
+---
+
+### Agent Visualization Frontend
+
+A browser UI for running agents interactively, seeding test data, and watching the agent's reasoning step-by-step as it streams.
+
+**Stack:** React 18 + TypeScript + Vite + Tailwind CSS v4. Communicates with the FastAPI backend (`api.py`) over SSE.
+
+**Start the backend:**
+
+```bash
+cd equiflow-mcp
+pip install -r requirements.txt
+uvicorn api:app --port 8000
+```
+
+**Start the frontend:**
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://localhost:5173**.
+
+**Run modes:**
+
+The `[LIVE][LOCAL][MOCK]` toggle in the header controls how each agent run executes. See [`equiflow-mcp/MODES.md`](equiflow-mcp/MODES.md) for full details.
+
+| Mode | What runs | Cost | Use for |
+|---|---|---|---|
+| **LIVE** | Real DB + real Anthropic API | Tokens per run | Verifying LLM behavior, demos |
+| **LOCAL** | Real DB + Python logic, no Anthropic | Free | Day-to-day dev (Duplicate Detection only) |
+| **MOCK** | Fixture replay, no DB or API | Free | Pure UI work, no backend needed |
+
+LIVE runs auto-save a fixture to `fixtures/{agent}.jsonl` on completion so MOCK has fresh data automatically.
+
+**Layout:**
+
+- **Sidebar** — agent list (Duplicate Detection, Compliance Monitor, Order Triage) with LIVE/SOON badges; global Test Data panel at the top
+- **Test Data panel** — independent Cleanup and Seed buttons
+  - **Cleanup** — deletes all non-Flyway orders and related records; safe to run any time
+  - **HIGH / MED / LOW** — seeds duplicate order scenarios (stackable; multiple runs accumulate without cleanup)
+- **Main panel** — agent description, example prompts, input box, and streaming timeline
+- **Header** — `[LIVE][LOCAL][MOCK]` mode toggle; status bar with live pulse, tool call count, and token usage (`N in / N out tokens` for LIVE runs)
+- **Timeline** — step-by-step view of each agent iteration: tool calls, tool results (expandable JSON), and the final answer rendered as a structured findings table (verdict banner + duplicate pairs table + repeat offenders)
+
+**API endpoints (FastAPI):**
+
+| Endpoint | Method | Body | Purpose |
+|---|---|---|---|
+| `/api/run` | POST | `{ agent, question, mode: "live"\|"local"\|"mock" }` | Stream agent events (SSE) |
+| `/api/seed` | POST | `{ agent, level: "HIGH"\|"MED"\|"LOW" }` | Seed duplicate order scenario |
+| `/api/cleanup` | POST | — | Delete all scenario test data, preserve Flyway seed |
+| `/api/agents` | GET | — | List available agent IDs |
 
 ---
 

@@ -1,5 +1,5 @@
 """
-EQ-136: Duplicate Order Detection — Scenario Seed Script
+EQ-136: Duplicate Order Detection - Scenario Seed Script
 
 Sends X orders over Y ms across trader1 (60%) and trader2 (40%).
 Every (100/Z)th message is a re-submission of the preceding order for that user.
@@ -80,7 +80,8 @@ async def main():
     ap.add_argument("--messages",        type=int,   default=100,   help="Total orders to send (X)")
     ap.add_argument("--duration",        type=int,   default=30000, help="Window in ms for unique messages (Y)")
     ap.add_argument("--duplicate-pct",   type=float, default=10.0,  help="Percent of X that are duplicates (Z)")
-    ap.add_argument("--duplicate-delay", type=str,   default="1s",  help="Delay between original and duplicate: 1s=HIGH / 10s=MEDIUM / 60s=LOW")
+    ap.add_argument("--duplicate-delay", type=str,   default="1s",  help="Min delay between original and duplicate")
+    ap.add_argument("--max-delay",       type=str,   default="",    help="Max delay; if set, each duplicate gap is uniform(min, max)")
     ap.add_argument("--seed",            type=int,   default=42,    help="Random seed for user assignment")
     args = ap.parse_args()
 
@@ -88,6 +89,7 @@ async def main():
     Y         = args.duration / 1000.0
     dup_pct   = args.duplicate_pct
     dup_delay = parse_delay(args.duplicate_delay)
+    max_delay = parse_delay(args.max_delay) if args.max_delay else dup_delay
     dup_step  = round(100.0 / dup_pct)   # every Nth position is a duplicate
     n_dups    = X // dup_step
     n_unique  = X - n_dups
@@ -103,28 +105,28 @@ async def main():
 
     user_counts = {u["username"]: assignment.count(u["username"]) for u in USERS}
 
-    print(f"\n{'═' * 65}")
-    print(f"  EQ-136 · DUPLICATE ORDER SCENARIO SEED")
-    print(f"{'═' * 65}")
+    print(f"\n{'=' * 65}")
+    print(f"  EQ-136 - DUPLICATE ORDER SCENARIO SEED")
+    print(f"{'=' * 65}")
     print(f"  Messages      (X): {X}")
     print(f"  Duration      (Y): {args.duration} ms")
-    print(f"  Duplicate %   (Z): {dup_pct:.0f}%  →  {n_dups} duplicates,  {n_unique} unique")
+    print(f"  Duplicate %   (Z): {dup_pct:.0f}%  ->  {n_dups} duplicates,  {n_unique} unique")
     print(f"  Duplicate step   : every {dup_step}th message")
-    print(f"  Duplicate delay  : {args.duplicate_delay}  ({dup_delay:.0f}s)")
+    print(f"  Duplicate delay  : {args.duplicate_delay}-{args.max_delay or args.duplicate_delay}  (random per pair)")
     print(f"  Base interval    : {base_iv * 1000:.0f} ms")
     print(f"  Users            : {',  '.join(f'{u} = {c} messages' for u, c in user_counts.items())}")
-    print(f"{'─' * 65}\n")
+    print(f"{'-' * 65}\n")
 
     async with httpx.AsyncClient() as client:
         tokens = {}
         for u in USERS:
             tokens[u["username"]] = await get_token(client, u["username"], u["password"])
-        print("  Authenticated ✓\n")
+        print("  Authenticated ok\n")
         print(f"  {'#':>4}  {'Type':<10} {'User':<10} {'Ticker':<6} {'Side':<5} {'Qty':>5} {'Price':>8}  Order ID")
-        print(f"  {'─' * 4}  {'─' * 10} {'─' * 10} {'─' * 6} {'─' * 5} {'─' * 5} {'─' * 8}  {'─' * 36}")
+        print(f"  {'-' * 4}  {'-' * 10} {'-' * 10} {'-' * 6} {'-' * 5} {'-' * 5} {'-' * 8}  {'-' * 36}")
 
         last_send  = time.monotonic()
-        last_order = {}   # username → {pos, template, order_id}
+        last_order = {}   # username -> {pos, template, order_id}
         tmpl_idx   = 0
         dup_pairs  = []
 
@@ -134,7 +136,10 @@ async def main():
             is_dup   = (pos % dup_step == 0)
 
             elapsed      = time.monotonic() - last_send
-            target_sleep = dup_delay if is_dup else base_iv
+            if is_dup:
+                target_sleep = random.uniform(dup_delay, max_delay)
+            else:
+                target_sleep = base_iv
             await asyncio.sleep(max(0.0, target_sleep - elapsed))
 
             if is_dup and username in last_order:
@@ -170,18 +175,25 @@ async def main():
 
             last_send = time.monotonic()
 
+            pct = int(pos / X * 100)
+            milestone = pos % max(1, X // 10) == 0 or pos == X
+            if milestone:
+                filled = pct // 5
+                bar = '=' * filled + '-' * (20 - filled)
+                print(f"  [{bar}] {pct}%  ({pos}/{X})")
+
     # Summary
     W = 130
-    print(f"\n{'═' * W}")
+    print(f"\n{'=' * W}")
     print(f"  DUPLICATE PAIRS  ({len(dup_pairs)} total)")
-    print(f"{'─' * W}")
+    print(f"{'-' * W}")
     print(f"  {'User':<10}  {'Ticker':<6}  {'Side':<4}  {'Qty':>5}  {'Price':>8}  {'Gap':>5}  {'Suspicion':<9}  "
           f"{'Original UUID':<36}  {'Duplicate UUID':<36}")
-    print(f"  {'─'*10}  {'─'*6}  {'─'*4}  {'─'*5}  {'─'*8}  {'─'*5}  {'─'*9}  {'─'*36}  {'─'*36}")
+    print(f"  {'-'*10}  {'-'*6}  {'-'*4}  {'-'*5}  {'-'*8}  {'-'*5}  {'-'*9}  {'-'*36}  {'-'*36}")
     for p in dup_pairs:
         print(f"  {p['user']:<10}  {p['ticker']:<6}  {p['side']:<4}  {p['qty']:>5}  {p['price']:>8}  "
               f"{p['gap_s']:>4.1f}s  {p['suspicion']:<9}  {p['orig_id']:<36}  {p['dup_id']:<36}")
-    print(f"{'═' * W}")
+    print(f"{'=' * W}")
 
     pairs_file = Path(__file__).parent / "scenario_pairs.json"
     pairs_file.write_text(json.dumps({
@@ -189,7 +201,7 @@ async def main():
         "delay": args.duplicate_delay,
         "pairs": dup_pairs,
     }, indent=2))
-    print(f"\n  Saved {len(dup_pairs)} pairs → {pairs_file.name}")
+    print(f"\n  Saved {len(dup_pairs)} pairs -> {pairs_file.name}")
 
     print(f"\n  Run the agent:")
     print(f"  python equiflow-mcp/duplicate_agent.py \"Scan today's orders for duplicates\"")

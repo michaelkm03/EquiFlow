@@ -25,22 +25,31 @@ async def run_agent_streaming(
       { type: "iteration_start", iteration: int }
       { type: "tool_call",       name: str, input: dict }
       { type: "tool_result",     name: str, result: str }
+      { type: "token_usage",     iteration: int, input_tokens: int, output_tokens: int }
       { type: "done",            answer: str }
       { type: "error",           message: str }
     """
-    client = anthropic.Anthropic()
+    client = anthropic.AsyncAnthropic()
     messages = [{"role": "user", "content": question}]
 
     for iteration in range(1, max_iterations + 1):
         yield {"type": "iteration_start", "iteration": iteration}
 
-        response = client.messages.create(
+        async with client.messages.stream(
             model="claude-opus-4-7",
-            max_tokens=16000,
+            max_tokens=32000,
             system=system,
             tools=tools,
             messages=messages,
-        )
+        ) as stream:
+            response = await stream.get_final_message()
+
+        yield {
+            "type": "token_usage",
+            "iteration": iteration,
+            "input_tokens": response.usage.input_tokens,
+            "output_tokens": response.usage.output_tokens,
+        }
 
         if response.stop_reason == "end_turn":
             answer = next((b.text for b in response.content if hasattr(b, "text")), "")
