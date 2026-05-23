@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import type { AgentEvent } from '../types'
-import { StepCard } from './StepCard'
+import { Timeline } from './Timeline'
 
 interface AgentConfig {
   id: string
@@ -263,9 +263,7 @@ export function AgentRunner() {
               Enter a question and press Run
             </div>
           )}
-          {events.map((event, i) => (
-            <StepCard key={i} event={event} />
-          ))}
+          <Timeline events={events} />
           <div ref={bottomRef} />
         </div>
       </div>
