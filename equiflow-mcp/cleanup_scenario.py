@@ -70,7 +70,7 @@ def main():
     id_list = ", ".join(f"'{oid}'" for oid in order_ids)
 
     # ── 2. compliance-service ────────────────────────────────────────────────
-    n_comp = count("equiflow_compliance", "compliance_results", f"order_id IN ({id_list})")
+    n_comp = count("equiflow_compliance", "compliance_checks", f"order_id IN ({id_list})")
     print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_comp} compliance results")
 
     # ── 3. audit-service ─────────────────────────────────────────────────────
@@ -82,9 +82,8 @@ def main():
     print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_sagas} sagas")
 
     # ── 5. ledger-service ────────────────────────────────────────────────────
-    n_holds = count("equiflow_ledger", "account_holds", f"order_id IN ({id_list})")
-    n_txns  = count("equiflow_ledger", "ledger_transactions", f"order_id IN ({id_list})")
-    print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_holds} ledger holds, {n_txns} ledger transactions")
+    n_txns = count("equiflow_ledger", "ledger_transactions", f"order_id IN ({id_list})")
+    print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_txns} ledger transactions")
 
     if dry:
         print("\n  Run with --execute to apply.\n")
@@ -92,22 +91,21 @@ def main():
 
     # ── Execute deletes ──────────────────────────────────────────────────────
     print()
-    psql("equiflow_compliance", f"DELETE FROM compliance_results WHERE order_id IN ({id_list});")
-    print("  compliance_results ✓")
+    psql("equiflow_compliance", f"DELETE FROM compliance_checks WHERE order_id IN ({id_list});")
+    print("  compliance_checks ok")
 
     psql("equiflow_audit", f"DELETE FROM audit_events WHERE order_id IN ({id_list});")
-    print("  audit_events ✓")
+    print("  audit_events ok")
 
     psql("equiflow_saga", f"DELETE FROM saga_steps WHERE saga_id IN (SELECT id FROM sagas WHERE order_id IN ({id_list}));")
     psql("equiflow_saga", f"DELETE FROM sagas WHERE order_id IN ({id_list});")
-    print("  sagas + saga_steps ✓")
+    print("  sagas + saga_steps ok")
 
-    psql("equiflow_ledger", f"DELETE FROM account_holds WHERE order_id IN ({id_list});")
     psql("equiflow_ledger", f"DELETE FROM ledger_transactions WHERE order_id IN ({id_list});")
-    print("  account_holds + ledger_transactions ✓")
+    print("  ledger_transactions ok")
 
     psql("equiflow_orders", f"DELETE FROM orders WHERE id IN ({id_list});")
-    print(f"  orders ✓ ({n_orders} deleted)")
+    print(f"  orders ok ({n_orders} deleted)")
 
     print("\n  Done. Stack is ready for the next scenario run.\n")
 
