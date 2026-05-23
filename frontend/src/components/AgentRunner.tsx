@@ -175,7 +175,6 @@ export function AgentRunner() {
   }
 
   async function seed(level: SeedLevel) {
-    selectAgent('duplicate')
     setSeedLog([])
     setSeedStatus('running')
     const res = await fetch('/api/seed', {
@@ -247,156 +246,119 @@ export function AgentRunner() {
   return (
     <div className="flex h-screen max-w-6xl mx-auto p-6 gap-0 bg-[#f0f3f5]">
 
-      {/* Sidebar */}
-      <div className="w-64 shrink-0 flex flex-col border-r border-zinc-200 pr-5 mr-7">
-        <p className="text-[10px] font-semibold text-zinc-400 uppercase tracking-widest mb-4">EquiFlow</p>
+      {/* Sidebar — flat agent list, no card chrome */}
+      <div className="w-60 shrink-0 flex flex-col border-r border-zinc-200 pr-5 mr-7">
+        <p className="text-xs font-semibold text-zinc-400 mb-5 tracking-wide">EquiFlow</p>
 
-        {/* Test Data card */}
-        <div className="rounded-md border border-zinc-200 bg-white overflow-hidden mb-4">
-          <div className="px-3 py-2 border-b border-zinc-100 bg-zinc-50">
-            <p className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Test Data</p>
-          </div>
-          <div className="px-3 py-3 flex flex-col gap-2.5">
-            <button
-              onClick={cleanup}
-              disabled={seedStatus === 'running' || status === 'running'}
-              className="w-full rounded-sm border border-zinc-200 hover:border-[#0b7a75] bg-zinc-50 hover:bg-[#f0f3f5] text-zinc-500 hover:text-[#0b7a75] disabled:opacity-30 disabled:cursor-not-allowed py-1.5 text-[11px] font-mono font-semibold tracking-wide transition-all"
+        {/* Agent list */}
+        <div className="flex flex-col flex-1">
+          {AGENTS.filter(a => a.ready).map((agent, i, arr) => (
+            <div
+              key={agent.id}
+              className={[
+                'transition-all duration-150 border-l-2',
+                i < arr.length - 1 ? 'border-b border-zinc-100' : '',
+                selectedId === agent.id
+                  ? 'border-l-[#0b7a75] bg-white'
+                  : 'border-l-transparent hover:bg-white/60',
+              ].join(' ')}
             >
-              {seedStatus === 'running' ? '…' : 'Cleanup'}
-            </button>
-            <div>
-              <p className="text-[10px] text-zinc-500 mb-1.5 font-semibold uppercase tracking-wide">Duplicate Detection</p>
-              <div className="flex gap-1.5">
-                {SEED_PRESETS.map(preset => (
-                  <button
-                    key={preset.label}
-                    onClick={() => seed(preset.label)}
-                    disabled={seedStatus === 'running' || status === 'running'}
-                    title={preset.desc}
-                    className={`flex-1 rounded-sm border text-white disabled:opacity-30 disabled:cursor-not-allowed py-1.5 text-[11px] font-mono font-semibold tracking-wide transition-all ${preset.color}`}
-                  >
-                    {seedStatus === 'running' ? '…' : preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Agents card */}
-        <div className="rounded-md border border-zinc-200 bg-white overflow-hidden">
-          <div className="px-3 py-2 border-b border-zinc-100 bg-zinc-50">
-            <p className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Agents</p>
-          </div>
-          <div className="flex flex-col">
-            {AGENTS.filter(a => a.ready).map((agent, i, arr) => (
               <button
-                key={agent.id}
                 onClick={() => selectAgent(agent.id)}
                 disabled={status === 'running'}
                 className={[
-                  'w-full text-left px-3 py-3 transition-all duration-150 border-l-2',
-                  i < arr.length - 1 ? 'border-b border-zinc-100' : '',
-                  selectedId === agent.id
-                    ? 'border-l-[#0b7a75] bg-[#f0f3f5] text-[#19535f]'
-                    : 'border-l-transparent text-zinc-700 hover:bg-zinc-50 hover:text-[#0b7a75] cursor-pointer',
+                  'w-full text-left px-3 pt-3 pb-2.5 disabled:cursor-not-allowed',
+                  selectedId === agent.id ? 'text-[#19535f]' : 'text-zinc-600 hover:text-zinc-900',
                 ].join(' ')}
               >
-                <span className="text-sm font-semibold">{agent.label}</span>
-                <p className="text-xs mt-1 leading-relaxed text-zinc-500">{agent.description}</p>
-                <p className={`text-[11px] mt-1.5 font-mono ${selectedId === agent.id ? 'text-[#0b7a75]' : 'text-zinc-400'}`}>{agent.ticket}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold leading-snug">{agent.label}</span>
+                  <span className={`text-[10px] font-mono shrink-0 ${selectedId === agent.id ? 'text-[#0b7a75]' : 'text-zinc-300'}`}>{agent.ticket}</span>
+                </div>
+                <p className="text-[11px] mt-1 leading-relaxed text-zinc-400 line-clamp-2">{agent.description}</p>
               </button>
-            ))}
-          </div>
+
+              {/* Seed controls — Duplicate Detection only */}
+              {agent.id === 'duplicate' && (
+                <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
+                  <div className="border-t border-zinc-100 pt-2.5 flex flex-col gap-1.5">
+                    <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wide">Seed</p>
+                    <div className="flex gap-1.5">
+                      {SEED_PRESETS.map(preset => (
+                        <button
+                          key={preset.label}
+                          onClick={() => seed(preset.label)}
+                          disabled={seedStatus === 'running' || status === 'running'}
+                          title={preset.desc}
+                          className={`flex-1 rounded-sm border text-white disabled:opacity-30 disabled:cursor-not-allowed py-1.5 text-[11px] font-mono font-semibold tracking-wide transition-all ${preset.color}`}
+                        >
+                          {seedStatus === 'running' ? '…' : preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Cleanup — global footer, applies to all agents */}
+        <div className="mt-4 pt-4 border-t border-zinc-200">
+          <button
+            onClick={cleanup}
+            disabled={seedStatus === 'running' || status === 'running'}
+            className="w-full rounded-sm border border-zinc-200 hover:border-zinc-300 bg-zinc-50 hover:bg-zinc-100 text-zinc-500 hover:text-zinc-700 disabled:opacity-30 disabled:cursor-not-allowed py-1.5 text-[11px] font-mono font-semibold tracking-wide transition-all"
+          >
+            {seedStatus === 'running' ? '…' : 'Cleanup'}
+          </button>
+          <p className="text-[10px] text-zinc-300 mt-1.5 text-center">removes all test data</p>
         </div>
       </div>
 
       {/* Main panel */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden gap-4">
 
-        {/* ── Seed output — fixed 180px ─────────────────── */}
-        <div className="h-[180px] shrink-0 flex flex-col mb-4 pb-4 border-b border-zinc-200">
-          <p className="text-xs font-bold text-zinc-700 uppercase tracking-wide mb-2 shrink-0">Seed Output</p>
-          <div className="flex-1 rounded-md bg-white border border-zinc-200 overflow-hidden flex flex-col">
-            {seedLog.length > 0 ? (
-              <>
-                <div className="flex items-center justify-between px-3 pt-2.5 pb-1.5 border-b border-zinc-100 shrink-0">
-                  <p className="text-[10px] font-semibold font-mono tracking-widest uppercase text-zinc-400">
-                    {seedStatus === 'running' ? 'Running…' : seedStatus === 'done' ? 'Done' : 'Failed'}
-                  </p>
-                  {seedStatus !== 'running' && (
-                    <button
-                      onClick={() => { setSeedLog([]); setSeedStatus('idle') }}
-                      className="text-[10px] text-zinc-400 hover:text-[#0b7a75] transition-colors"
-                    >
-                      dismiss
-                    </button>
-                  )}
-                </div>
-                <div className="flex-1 overflow-y-auto p-3">
-                  {seedLog.map((block, bi) => (
-                    <div key={bi} className="mb-2">
-                      {block.phase && (
-                        <p className="text-[10px] text-[#0b7a75] font-mono uppercase tracking-widest mb-1">-- {block.phase}</p>
-                      )}
-                      {block.lines.map((line, li) => (
-                        <p key={li} className="text-[11px] font-mono text-zinc-600 leading-relaxed whitespace-pre">{line}</p>
-                      ))}
-                    </div>
-                  ))}
-                  <div ref={seedBottomRef} />
-                </div>
-              </>
-            ) : (
-              <div className="flex-1 flex items-center justify-center">
-                <p className="text-[11px] font-mono text-zinc-300 italic">Seed output will appear here</p>
-              </div>
-            )}
+        {/* Agent header */}
+        <div className="shrink-0">
+          <div className="flex items-baseline gap-3 mb-1">
+            <h2 className="text-lg font-bold text-zinc-900 tracking-tight">{selectedAgent.label}</h2>
+            <span className="text-[10px] px-2 py-0.5 rounded-sm bg-zinc-100 text-zinc-400 font-mono tracking-widest shrink-0">
+              {selectedAgent.ticket}
+            </span>
           </div>
-        </div>
-
-        {/* ── Agents — fixed 152px ──────────────────────── */}
-        <div className="h-[152px] shrink-0 flex flex-col mb-4 pb-4 border-b border-zinc-200">
-          <p className="text-xs font-bold text-zinc-700 uppercase tracking-wide mb-2 shrink-0">Agents</p>
-          <div className="flex-1 overflow-hidden">
-            <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-lg font-bold text-zinc-900 tracking-tight">{selectedAgent.label}</h2>
-              <span className="text-[10px] px-2 py-0.5 rounded-sm bg-[#d7c9aa]/30 text-[#0b7a75] border border-[#d7c9aa] font-mono tracking-widest shrink-0">
-                {selectedAgent.ticket}
-              </span>
+          <p className="text-zinc-500 text-sm leading-snug">{selectedAgent.description}</p>
+          {selectedAgent.examples.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              <span className="text-xs text-zinc-400 self-center">Try:</span>
+              {selectedAgent.examples.map(ex => (
+                <button
+                  key={ex}
+                  onClick={() => { if (status !== 'running') setQuestion(ex) }}
+                  disabled={status === 'running'}
+                  className="text-xs px-2.5 py-1 rounded-sm border border-zinc-200 text-zinc-500 hover:border-[#0b7a75] hover:text-[#0b7a75] transition-colors disabled:opacity-30 bg-white"
+                >
+                  {ex}
+                </button>
+              ))}
             </div>
-            <p className="text-zinc-500 text-sm leading-snug line-clamp-2">{selectedAgent.description}</p>
-            {selectedAgent.examples.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                <span className="text-xs text-zinc-400 self-center">Try:</span>
-                {selectedAgent.examples.map(ex => (
-                  <button
-                    key={ex}
-                    onClick={() => { if (status !== 'running') setQuestion(ex) }}
-                    disabled={status === 'running'}
-                    className="text-xs px-2.5 py-1 rounded-sm border border-zinc-200 text-zinc-500 hover:border-[#0b7a75] hover:text-[#0b7a75] transition-colors disabled:opacity-30 bg-white"
-                  >
-                    {ex}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
         </div>
 
-        {/* ── Prompt — fixed 72px ───────────────────────── */}
-        <div className="h-[72px] shrink-0 flex flex-col mb-4 pb-4 border-b border-zinc-200">
+        {/* Prompt row + status */}
+        <div className="shrink-0">
           <div className="flex gap-2">
             <input
               type="text"
               value={question}
               onChange={e => setQuestion(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && status !== 'running' && run()}
-              placeholder="Enter prompt here..."
+              placeholder={selectedAgent.placeholder || 'Enter a prompt…'}
               disabled={status === 'running'}
               className="flex-1 rounded-md bg-white border border-zinc-300 text-zinc-900 placeholder-zinc-400 px-3 py-2 text-sm focus:outline-none focus:border-[#0b7a75] focus:ring-1 focus:ring-[#0b7a75]/15 disabled:opacity-40 transition-colors"
             />
-            {/* LIVE / LOCAL / MOCK segmented toggle */}
+            {/* LIVE / LOCAL / MOCK toggle */}
             <div className="flex rounded-md border border-zinc-200 overflow-hidden shrink-0 self-stretch">
               {([
                 { key: 'live',  label: 'LIVE',  active: 'bg-[#0b7a75] text-white', hover: 'hover:text-[#0b7a75]' },
@@ -428,14 +390,14 @@ export function AgentRunner() {
               </button>
             )}
             {events.length > 0 && status !== 'running' && (
-              <button onClick={reset} className="rounded-md border border-zinc-200 hover:border-[#0b7a75] text-zinc-500 hover:text-[#0b7a75] px-4 py-2 text-xs transition-colors bg-white">
+              <button onClick={reset} className="rounded-md border border-zinc-200 hover:border-zinc-300 text-zinc-400 hover:text-zinc-600 px-4 py-2 text-xs transition-colors bg-white">
                 Clear
               </button>
             )}
           </div>
-          <div className="h-5 mt-1.5 flex items-center gap-2">
+          <div className="h-5 mt-1.5 flex items-center">
             {status === 'running' && (
-              <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+              <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                 <span className={`w-1.5 h-1.5 rounded-full animate-pulse inline-block ${
                   mode === 'mock' ? 'bg-[#c47d0e]' : mode === 'local' ? 'bg-[#19535f]' : 'bg-[#0b7a75]'
                 }`} />
@@ -450,8 +412,8 @@ export function AgentRunner() {
                 <p className="text-[11px] text-zinc-400 font-mono">
                   {events.filter(e => e.type === 'tool_call').length} tool calls
                   {totalIn > 0 && <span className="ml-2">· {totalIn.toLocaleString()} in / {totalOut.toLocaleString()} out tokens</span>}
-                  {mode === 'mock'  && <span className="ml-2 text-[#c47d0e]">· mock replay</span>}
-                  {mode === 'local' && <span className="ml-2 text-[#19535f]">· local compute</span>}
+                  {mode === 'mock'  && <span className="ml-2 text-[#c47d0e]">· mock</span>}
+                  {mode === 'local' && <span className="ml-2 text-[#19535f]">· local</span>}
                 </p>
               )
             })()}
@@ -461,23 +423,62 @@ export function AgentRunner() {
           </div>
         </div>
 
-        {/* ── Timeline — flex remaining ──────────────────── */}
-        <div className="flex-1 flex flex-col min-h-0">
-          <p className="text-xs font-bold text-zinc-700 uppercase tracking-wide mb-2 shrink-0">Timeline</p>
-          <div className="flex-1 rounded-md border border-zinc-200 bg-white overflow-y-auto">
-            {events.length > 0 ? (
-              <div className="p-4">
-                <Timeline events={events} />
-                <div ref={bottomRef} />
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-[11px] font-mono text-zinc-300 italic">Agent output will appear here</p>
-              </div>
-            )}
-          </div>
+        {/* Timeline */}
+        <div className="flex-1 min-h-0 rounded-md border border-zinc-200 bg-white overflow-y-auto">
+          {events.length > 0 ? (
+            <div className="p-4">
+              <Timeline events={events} />
+              <div ref={bottomRef} />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-[11px] font-mono text-zinc-300 italic">Run an agent to see output</p>
+            </div>
+          )}
         </div>
-      </div>
+
+      </div>{/* end scrollable column */}
+
+      {/* Bottom seed strip — hidden when idle, expanded while running, collapsed when done */}
+      {seedLog.length > 0 && (
+        <div className="shrink-0 border-t border-zinc-200 bg-white">
+          {seedStatus === 'running' ? (
+            <div className="h-[200px] flex flex-col">
+              <div className="flex items-center px-4 py-2 border-b border-zinc-100 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0b7a75] animate-pulse mr-2 inline-block" />
+                <p className="text-[11px] font-mono text-zinc-400">seeding…</p>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 py-3">
+                {seedLog.map((block, bi) => (
+                  <div key={bi} className="mb-2">
+                    {block.phase && (
+                      <p className="text-[10px] text-[#0b7a75] font-mono uppercase tracking-widest mb-1">── {block.phase}</p>
+                    )}
+                    {block.lines.map((line, li) => (
+                      <p key={li} className="text-[11px] font-mono text-zinc-500 leading-relaxed whitespace-pre">{line}</p>
+                    ))}
+                  </div>
+                ))}
+                <div ref={seedBottomRef} />
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between px-4 py-2.5">
+              <p className={`text-[11px] font-mono ${seedStatus === 'done' ? 'text-[#0b7a75]' : 'text-[#7b2d26]'}`}>
+                {seedStatus === 'done' ? '✓ seed complete' : '✕ seed failed'}
+              </p>
+              <button
+                onClick={() => { setSeedLog([]); setSeedStatus('idle') }}
+                className="text-[10px] text-zinc-400 hover:text-zinc-600 transition-colors font-mono"
+              >
+                dismiss
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      </div>{/* end main panel */}
     </div>
   )
 }
