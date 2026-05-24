@@ -1224,93 +1224,202 @@ list_orders(status=REJECTED, from=today)
 |------|------|--------|----------|
 | AI Agents | Feature | 5 | P1 |
 
-**Invocation pattern:** Triggered — fires automatically when an order reaches `FAILED` or `COMPENSATION_REQUIRED` status via a Kafka event.
+**Problem it solves:** When a saga fails, ops receives a Kafka event with an order ID and nothing else. They manually trace the saga, audit log, and ledger to understand root cause and decide whether to retry, credit the account, or escalate. This agent does that trace automatically and emits a structured decision.
 
-**Problem it solves:** When a saga fails, ops today receives a Kafka event with an order ID and nothing else. They then manually trace through the saga, audit log, and ledger to understand what happened and decide whether to retry, credit the account, or escalate. This agent does that trace automatically and emits a structured decision.
+---
 
-**Trigger wiring:**
+### Invocation Modes
+
+This agent supports two invocation modes — same decision logic, different trigger:
+
+| Mode | How | Used for |
+|---|---|---|
+| **Kafka-triggered** | `kafka_consumer.py` fires when `equiflow.saga.failed` or `equiflow.saga.compensated` event arrives; passes `order_id` as CLI arg | Production background operation |
+| **On-demand (UI)** | User selects agent in the React frontend and types a question | Demo / manual investigation |
+
+**UI example prompts:**
+- `Escalate any failed orders from the last hour`
+- `Investigate failed orders today`
+
+**Kafka wiring** (`equiflow-mcp/kafka_consumer.py`):
 ```python
-# kafka_consumer.py — runs as a long-lived process
 from kafka import KafkaConsumer
 import subprocess, json
 
 consumer = KafkaConsumer(
-    "saga.order.failed",
-    "saga.compensation.required",
+    "equiflow.saga.failed",
+    "equiflow.saga.compensated",
     bootstrap_servers="localhost:9092",
     value_deserializer=lambda m: json.loads(m.decode("utf-8")),
 )
 
 for message in consumer:
     order_id = message.value["orderId"]
-    topic = message.topic
-    subprocess.run([
-        "python", "equiflow-mcp/escalation_agent.py",
-        order_id, topic
-    ])
+    subprocess.run(["python", "equiflow-mcp/escalation_agent.py", order_id])
 ```
 
-The agent receives `order_id` and the triggering topic as CLI args. It investigates and either resolves the issue or escalates.
+---
 
-**Tools required:**
+### Tools
 
-| Tool | Status | Notes |
-|------|--------|-------|
-| `get_order` | Existing | Confirm failure status and retrieve saga ID |
-| `get_saga` | Existing | Identify which step failed and why |
-| `query_audit_log` | Existing | Retry count and last attempt time |
-| `get_ledger_account` | New (from EQ-131) | Check if account balance is the root cause |
-| `create_incident` | **New** | POST to PagerDuty — escalate non-recoverable failures to on-call |
+| Tool | Status | Purpose |
+|------|--------|---------|
+| `list_orders` | Existing | On-demand mode: scan for FAILED orders in time window |
+| `get_order` | Existing | Confirm failure status and retrieve saga ID and user ID |
+| `get_saga` | Existing | Identify which step failed, failure reason, saga status, retry count |
+| `query_audit_log` | Existing | Full retry history and timestamps — used when saga status is COMPENSATING |
+| `get_ledger_account` | **New** | `GET /ledger/accounts/{userId}` — check if insufficient funds failure is still blocking. Handler added to `equiflow_data_server.py`. |
+| `create_incident` | **New** | Mock PagerDuty — returns a fake incident ID. Handler added to `equiflow_data_server.py`. In production this would call the real PagerDuty Events API. |
 
-**New tool needed:**
-
-`create_incident(order_id, reason)` — calls PagerDuty API (handler lives in `equiflow_data_server.py`).
-See Q3 discussion for implementation. Requires `PAGERDUTY_API_KEY` and `PAGERDUTY_SERVICE_ID` in `.env`.
-
-**System prompt:**
+**`get_ledger_account` handler:**
+```python
+async def handle_get_ledger_account(args: dict) -> list[TextContent]:
+    return await _ok(await authed_get(f"/ledger/accounts/{args['user_id']}"))
 ```
-You are an EquiFlow order failure escalation agent.
 
-An order has just failed. Your goal: diagnose the root cause and take
-the appropriate action without waiting for human input.
+**`create_incident` handler (mock):**
+```python
+import uuid as _uuid
 
-Decision rules:
-- If failure_reason is TIMEOUT or NETWORK_ERROR and retry_count < 3:
-  recommend retry — do not escalate
-- If failure_reason is COMPLIANCE_FAILED or REJECTED:
-  do not retry — report as expected rejection, no incident needed
-- If failure_reason is INSUFFICIENT_FUNDS and the account now has sufficient balance:
-  recommend manual settlement retry
-- If failure_reason is INSUFFICIENT_FUNDS and the account still lacks funds:
-  create_incident — ops must contact the account holder
-- If saga status is COMPENSATION_REQUIRED:
-  always create_incident — manual financial reconciliation required
+async def handle_create_incident(args: dict) -> list[TextContent]:
+    incident_id = f"PD-{str(_uuid.uuid4())[:8].upper()}"
+    payload = {
+        "incident_id": incident_id,
+        "order_id": args["order_id"],
+        "severity": args.get("severity", "HIGH"),
+        "reason": args["reason"],
+        "status": "triggered",
+        "note": "Mock incident — in production this calls PagerDuty Events API v2",
+    }
+    return [TextContent(type="text", text=json.dumps(payload))]
+```
 
-Your final response must state:
+---
+
+### Decision Rules
+
+| Condition | Action | Incident? |
+|---|---|---|
+| `failure_reason` in `[TIMEOUT, NETWORK_ERROR]` AND `retry_count < 3` | RETRY — transient; recommend automatic retry | No |
+| `failure_reason` in `[TIMEOUT, NETWORK_ERROR]` AND `retry_count >= 3` | ESCALATE — retries exhausted | Yes |
+| `failure_reason` in `[COMPLIANCE_FAILED, REJECTED]` | NO_ACTION — expected rejection, not a system failure | No |
+| `failure_reason == INSUFFICIENT_FUNDS` AND `availableCash >= required` | INVESTIGATE — balance now sufficient; recommend manual settlement retry | No |
+| `failure_reason == INSUFFICIENT_FUNDS` AND `availableCash < required` | ESCALATE — account holder must be contacted | Yes |
+| `saga.status == COMPENSATING` | ESCALATE — always; financial reconciliation required regardless of failure reason | Yes |
+
+> **Note on saga status:** `COMPENSATING` (not `COMPENSATION_REQUIRED`) is the correct saga status. It means the orchestrator is actively rolling back a partial transaction. Check `saga.status`, not order status.
+
+---
+
+### Branching Logic
+
+```
+# On-demand mode: scan for failures
+list_orders(status=FAILED, from=<window>)
+  → for each order:
+      → get_order(order_id)           # get saga_id, user_id
+      → get_saga(saga_id)             # get failed_step, failure_reason, retry_count, saga.status
+
+# Both modes: decide per order
+if saga.status == COMPENSATING:
+    → query_audit_log(order_id)       # get full context
+    → create_incident(order_id, reason="Saga compensation required — manual reconciliation needed", severity="CRITICAL")
+
+elif failure_reason in [TIMEOUT, NETWORK_ERROR]:
+    if retry_count < 3:
+        → recommend RETRY             # no tool call needed
+    else:
+        → create_incident(order_id, reason="Retry limit reached", severity="HIGH")
+
+elif failure_reason in [COMPLIANCE_FAILED, REJECTED]:
+    → NO_ACTION                       # expected; not a system failure
+
+elif failure_reason == INSUFFICIENT_FUNDS:
+    → get_ledger_account(user_id)     # check current balance
+    if availableCash >= required:
+        → recommend INVESTIGATE       # manual settlement retry
+    else:
+        → create_incident(order_id, reason="Account balance insufficient", severity="HIGH")
+```
+
+---
+
+### System Prompt
+
+```
+You are an EquiFlow order failure escalation agent. Today is {today}.
+
+You may be invoked in two ways:
+1. A specific order ID is provided — investigate that order immediately using get_order.
+2. A time window question is asked — use list_orders(status=FAILED) to find all failures first.
+
+In both cases, apply the same decision rules per order:
+
+DECISION RULES:
+- saga.status == COMPENSATING → always create_incident (financial reconciliation required)
+- failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count < 3 → recommend RETRY
+- failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count >= 3 → create_incident (retries exhausted)
+- failure_reason in [COMPLIANCE_FAILED, REJECTED] → NO_ACTION (expected rejection)
+- failure_reason == INSUFFICIENT_FUNDS → call get_ledger_account to check current balance
+    if balance sufficient → recommend INVESTIGATE (manual retry)
+    if balance insufficient → create_incident (contact account holder)
+
+Your final response must state for each order:
 - Root cause (exact failure_reason from the data)
-- Action taken (recommended retry / incident created / no action needed)
+- Action taken (RETRY / INVESTIGATE / ESCALATE / NO_ACTION)
 - Why
+
+Do not speculate beyond what the tools return. If data is missing, say so.
+
+End your reply with this block (valid JSON, tags unchanged):
+
+<findings_json>
+{{
+  "mode": "<triggered|scan>",
+  "window": {{"from": "<ISO>", "to": "<ISO>"}},
+  "total_investigated": <int>,
+  "verdicts": [
+    {{
+      "order_id": "<UUID>",
+      "user_id": "<userId>",
+      "ticker": "<ticker>",
+      "failed_step": "<step_name>",
+      "failure_reason": "<exact string>",
+      "saga_status": "<FAILED|COMPENSATING|COMPENSATED>",
+      "retry_count": <int>,
+      "action": "<RETRY|INVESTIGATE|ESCALATE|NO_ACTION>",
+      "incident_id": "<PD-XXXX or null>",
+      "explanation": "<one sentence>"
+    }}
+  ],
+  "verdict": "<ALL_CLEAR|ESCALATE>"
+}}
+</findings_json>
+
+ALL_CLEAR if all actions are RETRY, INVESTIGATE, or NO_ACTION. ESCALATE if any incident was created.
 ```
 
-**Branching logic:**
-```
-get_order(order_id)
-  → get_saga(saga_id)
-    → if failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count < 3
-        → recommend retry (no tool call needed)
-    → if failure_reason in [COMPLIANCE_FAILED, REJECTED]
-        → report expected rejection, done
-    → if failure_reason == INSUFFICIENT_FUNDS
-        → get_ledger_account(user_id)
-          → if balance sufficient → recommend manual retry
-          → if balance insufficient → create_incident
-    → if saga.status == COMPENSATION_REQUIRED
-        → query_audit_log(order_id) for context
-        → create_incident
-```
+---
 
-**File to create:** `equiflow-mcp/escalation_agent.py`
-**File to create:** `equiflow-mcp/kafka_consumer.py` (trigger wiring)
+### Files
+
+| File | Action |
+|------|--------|
+| `equiflow-mcp/escalation_agent.py` | **Create** — system prompt, tools, dispatch, CLI entry |
+| `equiflow-mcp/kafka_consumer.py` | **Create** — Kafka consumer wiring for background trigger mode |
+| `equiflow-mcp/equiflow_data_server.py` | **Modify** — add `handle_get_ledger_account` and `handle_create_incident` handlers |
+| `equiflow-mcp/api.py` | **Modify** — add `escalation` to AGENTS dict and TRIAGE_DISPATCH (or new ESCALATION_DISPATCH) |
+| `frontend/src/components/AgentRunner.tsx` | **Modify** — set `ready: true`, add placeholder and examples |
+
+### Acceptance Criteria
+
+- [ ] Agent correctly identifies and creates incidents for COMPENSATING sagas
+- [ ] Agent recommends RETRY for transient errors (retry_count < 3), escalates when retries exhausted
+- [ ] Agent makes NO_ACTION for COMPLIANCE_FAILED / REJECTED — does not create unnecessary incidents
+- [ ] INSUFFICIENT_FUNDS branch calls get_ledger_account and decides based on current balance
+- [ ] `<findings_json>` block present and valid JSON in every response
+- [ ] Works in both Kafka-triggered (CLI arg) and on-demand (UI) modes
+- [ ] LIVE and MOCK modes functional in UI; LOCAL mode not supported (requires LLM reasoning)
 
 ---
 
@@ -1590,9 +1699,10 @@ pytest tests/test_handlers.py tests/test_settlement_agent_behavior.py -v
 
 | Test | Scenario | Assert |
 |------|----------|--------|
-| `test_create_incident_success` | PagerDuty returns 201 | Calls correct endpoint; returns success text |
-| `test_create_incident_api_error` | PagerDuty returns 500 | Returns `"Error 500: ..."` text; no exception |
-| `test_create_incident_includes_order_id` | Any call | `order_id` present in request body |
+| `test_create_incident_returns_mock_id` | Handler called with order_id + reason | Returns JSON with `incident_id` matching `PD-XXXXXXXX` pattern |
+| `test_create_incident_includes_order_id` | Any call | `order_id` present in returned payload |
+| `test_get_ledger_account_builds_correct_url` | Handler called with `user_id` | Calls `GET /ledger/accounts/{user_id}` with auth header |
+| `test_get_ledger_account_http_error` | Gateway returns 404 | Returns `"Error 404: ..."` text; no exception |
 
 **Tier 2 — Behavioral Tests**
 
@@ -1607,7 +1717,7 @@ Each test scripts the full tool chain: `get_order` → `get_saga` → optional f
 | `test_compliance_rejection_no_action` | `failure_reason=COMPLIANCE_FAILED` | Answer says expected rejection; no incident; no ledger lookup |
 | `test_insufficient_funds_balance_now_sufficient` | `failure_reason=INSUFFICIENT_FUNDS`; ledger shows balance > fill amount | Answer recommends manual retry; `create_incident` not called |
 | `test_insufficient_funds_balance_still_low` | `failure_reason=INSUFFICIENT_FUNDS`; ledger shows balance < fill amount | `create_incident` called; answer mentions account balance |
-| `test_compensation_required_always_escalates` | `saga.status=COMPENSATION_REQUIRED` | `create_incident` always called regardless of failure reason |
+| `test_compensating_saga_always_escalates` | `saga.status=COMPENSATING` | `create_incident` always called regardless of failure reason; answer mentions reconciliation |
 | `test_root_cause_always_stated` | Any scenario | `failure_reason` value from data appears in answer |
 
 **Run:**

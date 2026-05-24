@@ -52,10 +52,13 @@ const AGENTS: AgentConfig[] = [
   {
     id: 'escalation',
     label: 'Failure Escalation',
-    description: 'Triggered when an order reaches FAILED or COMPENSATION_REQUIRED — diagnoses root cause and auto-creates a PagerDuty incident if needed.',
+    description: 'Scans FAILED orders and traces each saga to classify root cause — transient retry, expected rejection, or active compensation requiring a PagerDuty incident.',
     ticket: 'EQ-132',
-    placeholder: '',
-    examples: [],
+    placeholder: 'Escalate any failed orders from the last hour',
+    examples: [
+      'Escalate any failed orders from the last hour',
+      'Investigate failed orders today',
+    ],
     ready: false,
   },
   {
