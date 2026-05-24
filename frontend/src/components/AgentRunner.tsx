@@ -16,7 +16,7 @@ const AGENTS: AgentConfig[] = [
   {
     id: 'duplicate',
     label: 'Duplicate Detection',
-    description: 'Scans orders for identical submissions by the same user within a time window and assigns HIGH / MEDIUM / LOW suspicion.',
+    description: 'Detects when the same user submits identical orders within a short window and classifies each pair as HIGH, MEDIUM, or LOW suspicion based on the time gap.',
     ticket: 'EQ-136',
     placeholder: 'Scan today\'s orders for duplicates',
     examples: [
@@ -28,7 +28,7 @@ const AGENTS: AgentConfig[] = [
   {
     id: 'compliance',
     label: 'Compliance Monitor',
-    description: 'Summarises all compliance breaches for a given period — breach count, violation type breakdown, and repeat offenders.',
+    description: 'Summarizes all wash-sale and insufficient-funds violations for a given period and flags accounts with repeat breaches.',
     ticket: 'EQ-136',
     placeholder: 'Show all compliance breaches today',
     examples: [
@@ -40,7 +40,7 @@ const AGENTS: AgentConfig[] = [
   {
     id: 'triage',
     label: 'Order Triage',
-    description: 'Given a stuck or failed order UUID, traces the saga, audit log, and retry history to identify root cause and recommend action.',
+    description: 'Traces the saga and audit trail of a specific failed or stuck order to pinpoint root cause and recommend a concrete action.',
     ticket: 'EQ-136',
     placeholder: 'Triage order <paste UUID here>',
     examples: [
@@ -52,7 +52,7 @@ const AGENTS: AgentConfig[] = [
   {
     id: 'escalation',
     label: 'Failure Escalation',
-    description: 'Scans FAILED orders and traces each saga to classify root cause — transient retry, expected rejection, or active compensation requiring a PagerDuty incident.',
+    description: 'Diagnoses the root cause of every FAILED order and decides whether to recommend a retry, flag for investigation, or create a PagerDuty incident.',
     ticket: 'EQ-132',
     placeholder: 'Escalate any failed orders from the last hour',
     examples: [

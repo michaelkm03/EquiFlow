@@ -1,3 +1,7 @@
+"""
+Summarizes all wash-sale and insufficient-funds violations for a given period
+and flags accounts with repeat breaches.
+"""
 import asyncio
 import sys
 from datetime import date

@@ -1,3 +1,7 @@
+"""
+Traces the saga and audit trail of a specific failed or stuck order
+to pinpoint root cause and recommend a concrete action.
+"""
 import asyncio
 import sys
 from datetime import date

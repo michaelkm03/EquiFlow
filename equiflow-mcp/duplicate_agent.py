@@ -1,3 +1,7 @@
+"""
+Detects when the same user submits identical orders within a short window
+and classifies each pair as HIGH, MEDIUM, or LOW suspicion based on the time gap.
+"""
 import asyncio
 import json
 import re

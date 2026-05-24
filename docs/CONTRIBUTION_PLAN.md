@@ -1164,6 +1164,8 @@ Each agent builds on the existing `run_agent()` loop in `equiflow-mcp/loop.py` a
 |------|------|--------|----------|
 | AI Agents | Feature | 3 | P1 |
 
+**Purpose:** Summarizes all wash-sale and insufficient-funds violations for a given period and flags accounts with repeat breaches.
+
 **Invocation pattern:** On-demand — a human runs it from the CLI.
 
 **Problem it solves:** Compliance officers today manually query rejected orders, cross-reference the compliance check results for each, and group by failure type. This takes 15–30 minutes each morning. This agent does it in one command.
@@ -1223,6 +1225,8 @@ list_orders(status=REJECTED, from=today)
 | Epic | Type | Points | Priority |
 |------|------|--------|----------|
 | AI Agents | Feature | 5 | P1 |
+
+**Purpose:** Diagnoses the root cause of every FAILED order and decides whether to recommend a retry, flag for investigation, or create a PagerDuty incident.
 
 **Problem it solves:** When a saga fails, ops receives a Kafka event with an order ID and nothing else. They manually trace the saga, audit log, and ledger to understand root cause and decide whether to retry, credit the account, or escalate. This agent does that trace automatically and emits a structured decision.
 
@@ -1738,6 +1742,8 @@ pytest tests/test_handlers.py tests/test_escalation_agent_behavior.py -v
 |------|------|--------|----------|
 | AI Agents | Feature | 5 | P1 |
 
+**Purpose:** Detects when the same user submits identical orders within a short window and classifies each pair as HIGH, MEDIUM, or LOW suspicion based on the time gap.
+
 **Invocation pattern:** On-demand — a compliance officer runs it to scan for suspicious duplicate trades, or after running the seed script to verify the scenario works.
 
 **Problem it solves:** When a user submits the same order twice — different UUID but identical fields — both orders process successfully. Nothing fails. No alert fires. The most common real-world causes are a double-click on a mobile submit button, a client SDK retry with a new UUID after a network timeout, or a bot with no deduplication logic. Today a compliance officer has no automated tool to surface this. This agent scans all orders in a given time window, identifies pairs where all business fields match except the UUID, and assigns a suspicion level based on time proximity.
@@ -1959,6 +1965,8 @@ python equiflow-mcp/compare_duplicates.py
 | Epic | Type | Points | Priority |
 |------|------|--------|----------|
 | AI Agents | Feature | 5 | P1 |
+
+**Purpose:** Streams each agent's tool calls and reasoning steps live into a React UI so runs are observable, debuggable, and demoable without a terminal.
 
 **Problem it solves:**
 The three Claude API agents (compliance, duplicate detection, order triage) run exclusively from the CLI. There is no way to observe agent reasoning in real time — iteration steps, tool calls, tool results, and the final answer are only visible in terminal output. This makes the agents difficult to demo, hard to debug, and invisible to non-engineers.

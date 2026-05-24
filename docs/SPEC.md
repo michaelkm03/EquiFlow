@@ -164,10 +164,10 @@ An AI-powered operations console for investigating order anomalies. Runs alongsi
 
 | Agent | Ticket | Description |
 |---|---|---|
-| Duplicate Detection | EQ-136 ✅ | Groups today's orders by `(userId, ticker, side, quantity, limitPrice, type)`. Classifies pairs as HIGH/MEDIUM/LOW by time gap. Emits ESCALATE / REVIEW / CLEAR verdict. |
-| Compliance Monitor | EQ-136 ✅ | Surfaces wash-sale and insufficient-funds violations. Identifies repeat offenders. |
-| Order Triage | EQ-136 ✅ | Investigates stuck or failed orders by inspecting saga state and audit trail. |
-| Failure Escalation | EQ-132 🔵 | Triggered by `equiflow.saga.failed` Kafka events or on-demand scan. Traces saga + audit log per failed order, classifies root cause, and creates a mock PagerDuty incident for non-recoverable failures. |
+| Duplicate Detection | EQ-136 ✅ | Detects when the same user submits identical orders within a short window and classifies each pair as HIGH, MEDIUM, or LOW suspicion based on the time gap. |
+| Compliance Monitor | EQ-136 ✅ | Summarizes all wash-sale and insufficient-funds violations for a given period and flags accounts with repeat breaches. |
+| Order Triage | EQ-136 ✅ | Traces the saga and audit trail of a specific failed or stuck order to pinpoint root cause and recommend a concrete action. |
+| Failure Escalation | EQ-132 🔵 | Diagnoses the root cause of every FAILED order and decides whether to recommend a retry, flag for investigation, or create a PagerDuty incident. |
 
 ### Suspicion Thresholds (Duplicate Detection)
 
