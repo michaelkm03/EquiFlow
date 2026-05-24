@@ -19,19 +19,34 @@ Your goal: summarise all compliance breaches for the requested time period
 so a compliance officer can review them in one read.
 
 Steps:
-1. Call list_orders with status=REJECTED and an appropriate date range based on the question.
+1. Call list_orders with status=REJECTED and an appropriate date range.
 2. For each rejected order, call get_compliance_result to retrieve the violation type and reason.
 3. Summarise the findings.
 
 Your final response must include:
-- Total breach count
-- Breakdown by violation type (WASH_SALE vs INSUFFICIENT_FUNDS)
-- Which accounts appear more than once (repeat offenders)
+- Total breach count and breakdown by violation type (WASH_SALE_VIOLATION vs INSUFFICIENT_FUNDS)
+- Accounts that appear more than once (repeat offenders)
 - The most recent breach per account
 
 Do not include order IDs unless the user asks for them.
-Do not speculate on why a breach occurred beyond what the data shows.
-If there are no breaches for the period, say so clearly.
+Do not speculate beyond what the data shows.
+If there are no breaches, say so clearly.
+
+End your reply with this block (valid JSON, tags unchanged):
+
+<findings_json>
+{{
+  "period": {{"from": "<YYYY-MM-DD>", "to": "<YYYY-MM-DD>"}},
+  "total_breaches": <int>,
+  "violation_breakdown": {{"WASH_SALE_VIOLATION": <int>, "INSUFFICIENT_FUNDS": <int>}},
+  "repeat_offenders": [
+    {{"user_id": "<userId>", "breach_count": <int>, "latest_breach": "<YYYY-MM-DD>", "types": ["<type>"]}}
+  ],
+  "verdict": "<CLEAR|REVIEW|ESCALATE>"
+}}
+</findings_json>
+
+Verdict: ESCALATE if any repeat offenders, REVIEW if breaches exist with no repeats, CLEAR if none.
 """
 
 TOOLS = [

@@ -29,7 +29,7 @@ const AGENTS: AgentConfig[] = [
     id: 'compliance',
     label: 'Compliance Monitor',
     description: 'Summarises all compliance breaches for a given period — breach count, violation type breakdown, and repeat offenders.',
-    ticket: 'EQ-130',
+    ticket: 'EQ-136',
     placeholder: 'Show all compliance breaches today',
     examples: [
       'Show all compliance breaches today',
@@ -41,7 +41,7 @@ const AGENTS: AgentConfig[] = [
     id: 'triage',
     label: 'Order Triage',
     description: 'Given a stuck or failed order UUID, traces the saga, audit log, and retry history to identify root cause and recommend action.',
-    ticket: 'EQ-130',
+    ticket: 'EQ-136',
     placeholder: 'Triage order <paste UUID here>',
     examples: [
       'Triage order <paste a FAILED order UUID>',
@@ -70,9 +70,9 @@ const AGENTS: AgentConfig[] = [
 ]
 
 const SEED_PRESETS = [
-  { label: 'HIGH' as const, desc: '1s–4s gap',    color: 'bg-[#7b2d26] border-[#7b2d26] hover:bg-[#5e2219] hover:border-[#5e2219]' },
-  { label: 'MED'  as const, desc: '10s–25s gap',  color: 'bg-[#c47d0e] border-[#c47d0e] hover:bg-[#9e6409] hover:border-[#9e6409]' },
-  { label: 'LOW'  as const, desc: '60s–120s gap', color: 'bg-[#19535f] border-[#19535f] hover:bg-[#0f3840] hover:border-[#0f3840]' },
+  { label: 'HIGH' as const, desc: '~0.2s gap',  color: 'bg-[#7b2d26] border-[#7b2d26] hover:bg-[#5e2219] hover:border-[#5e2219]' },
+  { label: 'MED'  as const, desc: '~2s gap',    color: 'bg-[#c47d0e] border-[#c47d0e] hover:bg-[#9e6409] hover:border-[#9e6409]' },
+  { label: 'LOW'  as const, desc: '~7s gap',    color: 'bg-[#19535f] border-[#19535f] hover:bg-[#0f3840] hover:border-[#0f3840]' },
 ]
 
 type SeedLevel = typeof SEED_PRESETS[number]['label']
