@@ -351,6 +351,31 @@ export function AgentRunner() {
 
         {/* Prompt row + status */}
         <div className="shrink-0">
+          {/* LIVE / LOCAL toggle — above the input */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className="flex rounded-md border border-zinc-200 overflow-hidden">
+              {([
+                { key: 'live',  label: 'LIVE',  active: 'bg-[#c0392b] text-white', hover: 'hover:text-[#c0392b]' },
+                { key: 'local', label: 'LOCAL', active: 'bg-[#19535f] text-white', hover: 'hover:text-[#19535f]' },
+              ] as const).map((m, i) => (
+                <>
+                  {i > 0 && <div key={`sep-${m.key}`} className="w-px bg-zinc-200" />}
+                  <button
+                    key={m.key}
+                    onClick={() => { if (status !== 'running') setMode(m.key) }}
+                    disabled={status === 'running'}
+                    className={`px-3 py-1.5 text-[11px] font-bold font-mono tracking-widest transition-all disabled:opacity-40 ${
+                      mode === m.key ? m.active : `bg-white text-zinc-400 ${m.hover}`
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                </>
+              ))}
+            </div>
+          </div>
+
+          {/* Input + action buttons */}
           <div className="flex gap-2">
             <input
               type="text"
@@ -361,27 +386,6 @@ export function AgentRunner() {
               disabled={status === 'running'}
               className="flex-1 rounded-md bg-white border border-zinc-300 text-zinc-900 placeholder-zinc-400 px-3 py-2 text-sm focus:outline-none focus:border-[#0b7a75] focus:ring-1 focus:ring-[#0b7a75]/15 disabled:opacity-40 transition-colors"
             />
-            {/* LIVE / LOCAL toggle */}
-            <div className="flex rounded-md border border-zinc-200 overflow-hidden shrink-0 self-stretch">
-              {([
-                { key: 'live',  label: 'LIVE',  active: 'bg-[#0b7a75] text-white', hover: 'hover:text-[#0b7a75]' },
-                { key: 'local', label: 'LOCAL', active: 'bg-[#19535f] text-white', hover: 'hover:text-[#19535f]' },
-              ] as const).map((m, i) => (
-                <>
-                  {i > 0 && <div key={`sep-${m.key}`} className="w-px bg-zinc-200" />}
-                  <button
-                    key={m.key}
-                    onClick={() => { if (status !== 'running') setMode(m.key) }}
-                    disabled={status === 'running'}
-                    className={`px-3 text-[11px] font-bold font-mono tracking-widest transition-all disabled:opacity-40 ${
-                      mode === m.key ? m.active : `bg-white text-zinc-400 ${m.hover}`
-                    }`}
-                  >
-                    {m.label}
-                  </button>
-                </>
-              ))}
-            </div>
             {status === 'running' ? (
               <button onClick={stop} className="rounded-md bg-[#7b2d26] hover:bg-[#5e2219] text-white px-4 py-2 text-xs font-bold tracking-widest transition-colors font-mono">
                 STOP
@@ -401,7 +405,7 @@ export function AgentRunner() {
             {status === 'running' && (
               <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                 <span className={`w-1.5 h-1.5 rounded-full animate-pulse inline-block ${
-                  mode === 'local' ? 'bg-[#19535f]' : 'bg-[#0b7a75]'
+                  mode === 'local' ? 'bg-[#19535f]' : 'bg-[#c0392b]'
                 }`} />
                 {mode === 'local' ? 'Running local…' : 'Running…'}
               </div>

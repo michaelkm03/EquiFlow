@@ -40,7 +40,7 @@ async def run(question: str, call_tool: Callable) -> AsyncGenerator[dict, None]:
     try:
         order = json.loads(result)
     except Exception:
-        yield {"type": "error", "message": "Failed to parse order response."}
+        yield {"type": "error", "message": f"Could not retrieve order: {result}"}
         return
 
     saga_id     = order.get("sagaId")

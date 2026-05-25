@@ -2067,7 +2067,7 @@ A "Test Data" panel sits above the agent list in the sidebar and is not tied to 
 - SSE via `ReadableStream` + manual line parsing (no `EventSource`) so the client can use `POST` with a JSON body
 - `POST /api/seed` streams script stdout line-by-line as SSE — no blocking
 - `client.messages.stream()` context manager required by Anthropic SDK when `max_tokens > 10,000` — switched from `messages.create()` to satisfy this constraint
-- TWO-WAY MODE TOGGLE: LIVE (bright teal), LOCAL (dark teal) — color encodes whether Anthropic API is called
+- TWO-WAY MODE TOGGLE: LIVE (red `#c0392b`), LOCAL (dark teal `#19535f`) — color encodes whether Anthropic API is called; toggle sits above the input row, input fills full width with RUN beside it
 - LOCAL mode routes to a per-agent rule-based planner in `playbooks/` — real DB calls, same SSE event stream, no LLM; planners implement the happy-path decision rules from each system prompt
 - `findings_json` is now a structured object (not array) — `ResultPanel` parses verdict + pairs directly without regex scraping the narrative
 - Modern finance UI: `#f0f3f5` background, teal accent (`#0b7a75`/`#19535f`), amber for warning states, zinc palette, monospace badges
@@ -2105,14 +2105,17 @@ A "Test Data" panel sits above the agent list in the sidebar and is not tied to 
 - Introduced `playbooks/` directory: one `run(question, call_tool)` function per agent that encodes the system prompt's decision rules in Python, calls real tool handlers, and emits the identical SSE event stream
 - Added `local_loop.py` — thin wrapper with the same interface as `streaming_loop.py`
 - `api.py` routes LOCAL requests to `PLAYBOOKS[agent].run` via `run_agent_local`; `call_tool` is shared between LOCAL and LIVE so each planner uses the correct dispatch (e.g. `_list_orders_slim` for duplicate)
+- Fixed `compliance.py` planner: API returns `code` not `type` in violation objects, and `WASH_SALE` not `WASH_SALE_VIOLATION` — planner now normalises both
+- Fixed `triage.py` planner: surfaces actual API error message when `get_order` returns a non-200 response instead of generic "Failed to parse order response"
+- UI: LIVE button colour changed to red (`#c0392b`); toggle moved above input row; input fills full container width with RUN beside it
 
 **Planner decision rules:**
 
 | Planner | Key logic |
 |---------|-----------|
 | `duplicate.py` | Group by `(userId, ticker, side, qty, price, type)` → sort → compute gap → HIGH/MED/LOW |
-| `compliance.py` | List REJECTED → fetch each compliance result → group by userId → flag repeat offenders |
-| `triage.py` | Extract UUID → get_order → get_saga → query_audit_log → match COMPENSATING/TIMEOUT/COMPLIANCE/INSUFFICIENT_FUNDS rules |
+| `compliance.py` | List REJECTED → fetch each compliance result → normalise violation code → group by userId → flag repeat offenders |
+| `triage.py` | Extract UUID from question (or fall back to most recent FAILED) → get_order → get_saga → query_audit_log → match COMPENSATING/TIMEOUT/COMPLIANCE/INSUFFICIENT_FUNDS rules |
 
 **Files created:** `local_loop.py`, `playbooks/__init__.py`, `playbooks/base.py`, `playbooks/duplicate.py`, `playbooks/compliance.py`, `playbooks/triage.py`
 
@@ -2126,6 +2129,9 @@ A "Test Data" panel sits above the agent list in the sidebar and is not tied to 
 - [x] `· local` badge shown in status bar
 - [x] MOCK toggle removed from UI and backend
 - [x] `MODES.md` updated to two-mode architecture with planner docs
+- [x] Compliance planner correctly normalises `WASH_SALE` → `WASH_SALE_VIOLATION` and reads `code` field
+- [x] Triage planner surfaces actual API error when order is not found
+- [x] LIVE button is red; toggle is above input row; input fills full width
 
 ---
 
