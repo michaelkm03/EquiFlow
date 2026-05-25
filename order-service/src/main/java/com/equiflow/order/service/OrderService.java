@@ -96,6 +96,12 @@ public class OrderService {
         return toResponse(order);
     }
 
+    public OrderResponse getOrderInternal(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+        return toResponse(order);
+    }
+
     public Page<OrderResponse> listOrders(LocalDate from, LocalDate to, String status, String ticker, UUID userId, Pageable pageable) {
         Specification<Order> spec = userId != null
                 ? Specification.where((root, query, cb) -> cb.equal(root.get("userId"), userId))
