@@ -65,7 +65,14 @@ async def run(question: str, call_tool: Callable) -> AsyncGenerator[dict, None]:
         try:
             cr = json.loads(result)
             for v in cr.get("violations", []):
-                vtype = v.get("type", "UNKNOWN")
+                raw = v.get("type") or v.get("code", "UNKNOWN")
+                # Normalise API code to canonical violation type
+                if raw in ("WASH_SALE", "WASH_SALE_VIOLATION"):
+                    vtype = "WASH_SALE_VIOLATION"
+                elif raw in ("INSUFFICIENT_FUNDS",):
+                    vtype = "INSUFFICIENT_FUNDS"
+                else:
+                    vtype = raw
                 type_counts[vtype] += 1
                 user_violations[user_id].append({"type": vtype, "date": created_at})
         except Exception:
