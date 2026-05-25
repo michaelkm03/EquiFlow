@@ -1152,7 +1152,7 @@ Each agent builds on the existing `run_agent()` loop in `equiflow-mcp/loop.py` a
 | ⚪ | <nobr>[EQ-133](#eq-133--agent-test-suite-compliance-agent)</nobr> | Agent Test Suite — Compliance Agent | 3 | P1 — depends on EQ-130 |
 | ~~⚪~~ | ~~EQ-131 · Scheduled EOD Settlement Reconciliation Agent~~ | ~~removed — problem already solved by existing `/settlement/pending` endpoint~~ | ~~5~~ | ~~P1~~ |
 | ⚪ | <nobr>[EQ-134](#eq-134--agent-test-suite-settlement-reconciliation-agent)</nobr> | Agent Test Suite — Settlement Reconciliation Agent | 3 | P1 — reserved for future settlement agent |
-| ⚪ | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 |
+| ⚪ | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 — depends on EQ-140 for LIVE mode |
 | ⚪ | <nobr>[EQ-135](#eq-135--agent-test-suite-order-failure-escalation-agent)</nobr> | Agent Test Suite — Order Failure Escalation Agent | 3 | P1 — depends on EQ-132 |
 | ✅ | <nobr>[EQ-136](#eq-136--duplicate-order-detection-agent)</nobr> | Duplicate Order Detection Agent | 5 | P1 |
 | ✅ | <nobr>[EQ-137](#eq-137--agent-visualization-frontend)</nobr> | Agent Visualization Frontend — React + FastAPI SSE live step timeline | 5 | P1 |
@@ -1269,10 +1269,10 @@ for message in consumer:
 | Tool | Status | Purpose |
 |------|--------|---------|
 | `list_orders` | Existing | On-demand mode: scan for FAILED orders in time window |
-| `get_order` | Existing | Confirm failure status and retrieve saga ID and user ID |
-| `get_saga` | Existing | Identify which step failed, failure reason, saga status, retry count |
-| `query_audit_log` | Existing | Full retry history and timestamps — used when saga status is COMPENSATING |
-| `get_ledger_account` | **New** | `GET /ledger/accounts/{userId}` — check if insufficient funds failure is still blocking. Handler added to `equiflow_data_server.py`. |
+| `get_order` | Existing | Confirm failure status and retrieve `sagaId`, `userId`, `quantity`, `limitPrice` |
+| `get_saga` | Existing | Returns `saga.failureReason` (enum code), `saga.status`, and `steps[].stepName` for the failed step. No `retryCount` field exists on this model. |
+| `query_audit_log` | Existing | **Primary source of retry count** — count events where the event name contains "RETRY". Also fetched for full context when saga is COMPENSATING. Always called as part of the decision flow. |
+| `get_ledger_account` | **New** | `GET /ledger/accounts/{userId}` — returns `availableCash`, `cashBalance`, `cashOnHold`. Used in the INSUFFICIENT_FUNDS branch to check if the user can now afford the order. Handler added to `equiflow_data_server.py`. |
 | `create_incident` | **New** | Mock PagerDuty — returns a fake incident ID. Handler added to `equiflow_data_server.py`. In production this would call the real PagerDuty Events API. |
 
 **`get_ledger_account` handler:**
@@ -1304,12 +1304,20 @@ async def handle_create_incident(args: dict) -> list[TextContent]:
 
 | Condition | Action | Incident? |
 |---|---|---|
-| `failure_reason` in `[TIMEOUT, NETWORK_ERROR]` AND `retry_count < 3` | RETRY — transient; recommend automatic retry | No |
+| `saga.status == COMPENSATING` | ESCALATE — always; financial reconciliation required regardless of failure reason | Yes |
+| `failure_reason` in `[TIMEOUT, NETWORK_ERROR]` AND `retry_count < 3` | RETRY — transient; recommend manual re-submission | No |
 | `failure_reason` in `[TIMEOUT, NETWORK_ERROR]` AND `retry_count >= 3` | ESCALATE — retries exhausted | Yes |
-| `failure_reason` in `[COMPLIANCE_FAILED, REJECTED]` | NO_ACTION — expected rejection, not a system failure | No |
+| `failure_reason` in `[COMPLIANCE_REJECTED, ORDER_MATCHING_FAILED]` | NO_ACTION — expected rejection or upstream refusal, not a system failure | No |
 | `failure_reason == INSUFFICIENT_FUNDS` AND `availableCash >= required` | INVESTIGATE — balance now sufficient; recommend manual settlement retry | No |
 | `failure_reason == INSUFFICIENT_FUNDS` AND `availableCash < required` | ESCALATE — account holder must be contacted | Yes |
-| `saga.status == COMPENSATING` | ESCALATE — always; financial reconciliation required regardless of failure reason | Yes |
+
+> **Retry count source:** No `retryCount` field exists on `Saga` or `SagaStep`. Retry count is derived by counting audit log events where the event name contains "RETRY" for this order ID (`query_audit_log`). The system does not auto-retry — ops must re-submit manually — so retry_count is typically 0 in practice, meaning the RETRY branch fires. The `>= 3 → ESCALATE` branch becomes meaningful once a formal retry endpoint is added.
+
+> **`failure_reason` values are enum codes** set in `OrderSaga.failSaga()`: `COMPLIANCE_REJECTED`, `ORDER_MATCHING_FAILED`, `INSUFFICIENT_FUNDS`, `LEDGER_DEBIT_FAILED`, `SETTLEMENT_FAILED`, `NETWORK_ERROR`, `TIMEOUT`. These are standardized as part of EQ-132 (Java change). Previously the field stored free-form natural-language strings.
+
+> **`required` for INSUFFICIENT_FUNDS:** computed as `order.quantity × order.limitPrice` using values already fetched by `get_order`. `AccountResponse.availableCash` is compared against this.
+
+> **Saga step field names:** `SagaStep.stepName` (not `name`), `SagaStep.errorMessage` (not `failureReason`). The top-level `Saga.failureReason` is the authoritative failure code.
 
 > **Note on saga status:** `COMPENSATING` (not `COMPENSATION_REQUIRED`) is the correct saga status. It means the orchestrator is actively rolling back a partial transaction. Check `saga.status`, not order status.
 
@@ -1321,12 +1329,15 @@ async def handle_create_incident(args: dict) -> list[TextContent]:
 # On-demand mode: scan for failures
 list_orders(status=FAILED, from=<window>)
   → for each order:
-      → get_order(order_id)           # get saga_id, user_id
-      → get_saga(saga_id)             # get failed_step, failure_reason, retry_count, saga.status
+      → get_order(order_id)           # get saga_id, user_id, quantity, limitPrice
+      → get_saga(saga_id)             # get failed_step (stepName), failure_reason (saga.failureReason), saga.status
+      → query_audit_log(order_id)     # always fetch — count RETRY events → retry_count
 
 # Both modes: decide per order
+retry_count = len([e for e in audit_events if "RETRY" in e["event"].upper()])
+required    = order.quantity × order.limitPrice   # used only in INSUFFICIENT_FUNDS branch
+
 if saga.status == COMPENSATING:
-    → query_audit_log(order_id)       # get full context
     → create_incident(order_id, reason="Saga compensation required — manual reconciliation needed", severity="CRITICAL")
 
 elif failure_reason in [TIMEOUT, NETWORK_ERROR]:
@@ -1335,15 +1346,18 @@ elif failure_reason in [TIMEOUT, NETWORK_ERROR]:
     else:
         → create_incident(order_id, reason="Retry limit reached", severity="HIGH")
 
-elif failure_reason in [COMPLIANCE_FAILED, REJECTED]:
+elif failure_reason in [COMPLIANCE_REJECTED, ORDER_MATCHING_FAILED]:
     → NO_ACTION                       # expected; not a system failure
 
 elif failure_reason == INSUFFICIENT_FUNDS:
     → get_ledger_account(user_id)     # check current balance
     if availableCash >= required:
-        → recommend INVESTIGATE       # manual settlement retry
+        → recommend INVESTIGATE       # balance recovered; manual settlement retry
     else:
         → create_incident(order_id, reason="Account balance insufficient", severity="HIGH")
+
+else:
+    → INVESTIGATE                     # unrecognised failure code; manual review required
 ```
 
 ---
@@ -1362,11 +1376,14 @@ In both cases, apply the same decision rules per order:
 DECISION RULES:
 - saga.status == COMPENSATING → always create_incident (financial reconciliation required)
 - failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count < 3 → recommend RETRY
+  (retry_count = number of RETRY events in query_audit_log — typically 0 since system does not auto-retry)
 - failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count >= 3 → create_incident (retries exhausted)
-- failure_reason in [COMPLIANCE_FAILED, REJECTED] → NO_ACTION (expected rejection)
+- failure_reason in [COMPLIANCE_REJECTED, ORDER_MATCHING_FAILED] → NO_ACTION (expected rejection)
 - failure_reason == INSUFFICIENT_FUNDS → call get_ledger_account to check current balance
-    if balance sufficient → recommend INVESTIGATE (manual retry)
-    if balance insufficient → create_incident (contact account holder)
+    required = order.quantity * order.limitPrice (from get_order already called)
+    if availableCash >= required → recommend INVESTIGATE (balance recovered, manual retry)
+    if availableCash < required → create_incident (contact account holder)
+- any other failure_reason → INVESTIGATE (unrecognised; manual review required)
 
 Your final response must state for each order:
 - Root cause (exact failure_reason from the data)
@@ -1409,21 +1426,28 @@ ALL_CLEAR if all actions are RETRY, INVESTIGATE, or NO_ACTION. ESCALATE if any i
 
 | File | Action |
 |------|--------|
-| `equiflow-mcp/escalation_agent.py` | **Create** — system prompt, tools, dispatch, CLI entry |
-| `equiflow-mcp/kafka_consumer.py` | **Create** — Kafka consumer wiring for background trigger mode |
-| `equiflow-mcp/equiflow_data_server.py` | **Modify** — add `handle_get_ledger_account` and `handle_create_incident` handlers |
-| `equiflow-mcp/api.py` | **Modify** — add `escalation` to AGENTS dict and TRIAGE_DISPATCH (or new ESCALATION_DISPATCH) |
-| `frontend/src/components/AgentRunner.tsx` | **Modify** — set `ready: true`, add placeholder and examples |
+| `equiflow-mcp/escalation_agent.py` | **Create** — `SYSTEM_TEMPLATE` and `TOOLS` constants (imported by `api.py` for LIVE mode and `kafka_consumer.py` for CLI mode) |
+| `equiflow-mcp/playbooks/escalation.py` | **Create** — LOCAL mode rule-based planner; covers all decision branches using same `run(question, call_tool)` interface as other playbooks |
+| `equiflow-mcp/kafka_consumer.py` | **Create** — Kafka consumer; listens on `equiflow.saga.failed` and `equiflow.saga.compensated`; calls `escalation_agent.py` CLI with `order_id` |
+| `equiflow-mcp/equiflow_data_server.py` | **Modify** — add `handle_get_ledger_account` and `handle_create_incident` handlers; fix `/sagas/{id}` → `/saga/{id}` path bug on line 193 |
+| `equiflow-mcp/api.py` | **Modify** — add `escalation` to `AGENTS` dict with new `ESCALATION_DISPATCH`; add `escalation` to `PLAYBOOKS` dict |
+| `equiflow-mcp/requirements.txt` | **Modify** — add `kafka-python` |
+| `saga-orchestrator/.../OrderSaga.java` | **Modify** — standardize `failSaga()` calls to emit enum codes (`COMPLIANCE_REJECTED`, `ORDER_MATCHING_FAILED`, `INSUFFICIENT_FUNDS`, `LEDGER_DEBIT_FAILED`, `SETTLEMENT_FAILED`, `NETWORK_ERROR`, `TIMEOUT`) instead of free-form strings |
+| `frontend/src/components/AgentRunner.tsx` | **Modify** — set `ready: true` for escalation agent, add placeholder and example prompts |
 
 ### Acceptance Criteria
 
 - [ ] Agent correctly identifies and creates incidents for COMPENSATING sagas
-- [ ] Agent recommends RETRY for transient errors (retry_count < 3), escalates when retries exhausted
-- [ ] Agent makes NO_ACTION for COMPLIANCE_FAILED / REJECTED — does not create unnecessary incidents
-- [ ] INSUFFICIENT_FUNDS branch calls get_ledger_account and decides based on current balance
+- [ ] Agent recommends RETRY for transient errors (`retry_count < 3`), escalates when retries exhausted
+- [ ] `retry_count` is derived from `query_audit_log` — count of events with "RETRY" in event name; no stored field used
+- [ ] Agent makes NO_ACTION for `COMPLIANCE_REJECTED` / `ORDER_MATCHING_FAILED` — does not create unnecessary incidents
+- [ ] INSUFFICIENT_FUNDS branch calls `get_ledger_account`; `required = order.quantity × order.limitPrice` from already-fetched order
+- [ ] `Saga.failureReason` stores enum codes (`COMPLIANCE_REJECTED`, `INSUFFICIENT_FUNDS`, etc.) — `OrderSaga.failSaga()` updated
+- [ ] `equiflow_data_server.py` `/sagas/` → `/saga/` path bug fixed
 - [ ] `<findings_json>` block present and valid JSON in every response
 - [ ] Works in both Kafka-triggered (CLI arg) and on-demand (UI) modes
-- [ ] LIVE and LOCAL modes functional in UI; LOCAL uses rule-based planner (EQ-139) covering all decision branches
+- [ ] LIVE and LOCAL modes functional in UI; LOCAL uses rule-based planner (`playbooks/escalation.py`) covering all decision branches
+- [ ] **Depends on EQ-140** for LIVE mode — `get_order` returns 400 for BOT_OPERATOR tokens until EQ-140 is complete
 
 ---
 
@@ -2194,8 +2218,11 @@ public OrderResponse getOrderInternal(UUID orderId) {
 **Acceptance Criteria:**
 - [ ] `GET /orders/{id}` returns the order for a BOT_OPERATOR token regardless of who owns the order
 - [ ] `GET /orders/{id}` still enforces ownership for TRADER tokens (no regression)
-- [ ] Triage agent LOCAL mode successfully fetches a FAILED order by UUID and proceeds to get_saga + audit_log steps
+- [ ] Triage agent LIVE mode successfully fetches a FAILED order by UUID and proceeds to `get_saga` + `query_audit_log` steps
+- [ ] Escalation agent LIVE mode successfully fetches trader-owned FAILED orders (unblocks EQ-132 LIVE mode)
 - [ ] No changes to write endpoints (POST, DELETE, system-cancel)
+
+> **Unblocks:** EQ-132 LIVE mode, EQ-135 end-to-end tests against real DB.
 
 ---
 
