@@ -1423,7 +1423,7 @@ ALL_CLEAR if all actions are RETRY, INVESTIGATE, or NO_ACTION. ESCALATE if any i
 - [ ] INSUFFICIENT_FUNDS branch calls get_ledger_account and decides based on current balance
 - [ ] `<findings_json>` block present and valid JSON in every response
 - [ ] Works in both Kafka-triggered (CLI arg) and on-demand (UI) modes
-- [ ] LIVE and MOCK modes functional in UI; LOCAL mode not supported (requires LLM reasoning)
+- [ ] LIVE and LOCAL modes functional in UI; LOCAL uses rule-based planner (EQ-139) covering all decision branches
 
 ---
 
@@ -1986,12 +1986,13 @@ React (Vite) → fetch + ReadableStream → FastAPI SSE → streaming_loop.py �
 | File | Purpose |
 |------|---------|
 | `equiflow-mcp/streaming_loop.py` | Async generator variant of `run_agent()` — yields typed events, emits `token_usage` per iteration, uses `client.messages.stream()` context manager for large `max_tokens` |
-| `equiflow-mcp/api.py` | FastAPI app with `POST /api/run` (mode: live/local/mock), `POST /api/seed`, `POST /api/cleanup`, and `GET /api/agents` endpoints; includes `_local_duplicate_gen` Python duplicate logic |
-| `equiflow-mcp/MODES.md` | Reference table: LIVE vs LOCAL vs MOCK — what runs, cost, per-agent support, fixture format, event schema |
-| `equiflow-mcp/fixtures/duplicate.jsonl` | Hand-crafted MOCK fixture — 3 duplicate pairs (AAPL HIGH, MSFT HIGH, TSLA LOW), ESCALATE verdict, ready to replay without credits |
+| `equiflow-mcp/api.py` | FastAPI app with `POST /api/run` (mode: live/local), `POST /api/seed`, `POST /api/cleanup`, and `GET /api/agents` endpoints; routes LOCAL to per-agent planner |
+| `equiflow-mcp/local_loop.py` | Thin wrapper driving per-agent planners with the same interface as `streaming_loop.py` |
+| `equiflow-mcp/playbooks/` | Per-agent rule-based planners (`duplicate.py`, `compliance.py`, `triage.py`) + shared `base.py` helpers |
+| `equiflow-mcp/MODES.md` | Reference: LIVE vs LOCAL — what runs, cost, per-agent support, planner architecture, event schema |
 | `frontend/` | Vite + React + TypeScript + Tailwind project |
 | `frontend/src/types.ts` | `AgentEvent` union (iteration_start, tool_call, tool_result, token_usage, done, error) + `SeedEvent` |
-| `frontend/src/components/AgentRunner.tsx` | Three-segment `[LIVE][LOCAL][MOCK]` mode toggle; agent picker; question input; run/stop/clear; seed log panel; status bar with live token counts |
+| `frontend/src/components/AgentRunner.tsx` | Two-segment `[LIVE][LOCAL]` mode toggle; agent picker; question input; run/stop/clear; seed log panel; status bar with live token counts |
 | `frontend/src/components/Timeline.tsx` | Left-rail iteration timeline; `ResultPanel` renders structured findings table (verdict banner, duplicate pairs, repeat offenders) from `findings_json` object |
 
 **Modified files:**
@@ -2006,15 +2007,14 @@ React (Vite) → fetch + ReadableStream → FastAPI SSE → streaming_loop.py �
 | `frontend/vite.config.ts` | Added Tailwind plugin + `/api` proxy to `http://localhost:8000` |
 | `frontend/src/index.css` | Background `#f0f3f5`, tabular numerals, `-0.015em` letter-spacing |
 
-**Run modes (three-way toggle):**
+**Run modes (two-way toggle):**
 
 | Mode | What runs | Cost | Supported agents |
 |------|-----------|------|-----------------|
-| **LIVE** | Real DB + real Anthropic API; auto-saves fixture | Tokens per run | All three |
-| **LOCAL** | Real DB + Python duplicate logic; no Anthropic | Free | Duplicate Detection only |
-| **MOCK** | Fixture replay from `fixtures/{agent}.jsonl`; no DB or API | Free | All three (fixture required) |
+| **LIVE** | Real DB + real Anthropic API | Tokens per run | All |
+| **LOCAL** | Real DB + rule-based planner; no Anthropic | Free | All (via `playbooks/`) |
 
-See `equiflow-mcp/MODES.md` for full per-agent support matrix and fixture format.
+See `equiflow-mcp/MODES.md` for full per-agent support matrix and planner architecture.
 
 **Agent event types (`AgentEvent`):**
 
@@ -2067,9 +2067,8 @@ A "Test Data" panel sits above the agent list in the sidebar and is not tied to 
 - SSE via `ReadableStream` + manual line parsing (no `EventSource`) so the client can use `POST` with a JSON body
 - `POST /api/seed` streams script stdout line-by-line as SSE — no blocking
 - `client.messages.stream()` context manager required by Anthropic SDK when `max_tokens > 10,000` — switched from `messages.create()` to satisfy this constraint
-- THREE-WAY MODE TOGGLE: LIVE (bright teal), LOCAL (dark teal), MOCK (amber) — distinct colors encode the execution model at a glance
-- LOCAL mode replaces the LLM with a pure Python `defaultdict` grouping + `datetime.fromisoformat` gap calculation — exact output for duplicate detection which is a deterministic algorithm
-- MOCK mode replays JSONL fixtures with time gaps capped at 2s for snappy playback; LIVE runs auto-save a fresh fixture on completion
+- TWO-WAY MODE TOGGLE: LIVE (red `#c0392b`), LOCAL (dark teal `#19535f`) — color encodes whether Anthropic API is called; toggle sits above the input row, input fills full width with RUN beside it
+- LOCAL mode routes to a per-agent rule-based planner in `playbooks/` — real DB calls, same SSE event stream, no LLM; planners implement the happy-path decision rules from each system prompt
 - `findings_json` is now a structured object (not array) — `ResultPanel` parses verdict + pairs directly without regex scraping the narrative
 - Modern finance UI: `#f0f3f5` background, teal accent (`#0b7a75`/`#19535f`), amber for warning states, zinc palette, monospace badges
 
@@ -2084,12 +2083,55 @@ A "Test Data" panel sits above the agent list in the sidebar and is not tied to 
 - [x] Log panel auto-scrolls; shows ✓ / ✕ header and dismiss button on completion
 - [x] `streaming_loop.py` does not modify `loop.py`
 - [x] `api.py` imports all three agent modules without error
-- [x] Three-way `[LIVE][LOCAL][MOCK]` mode toggle; mode sent in request body
-- [x] LOCAL mode runs Python duplicate detection against real DB — no Anthropic credits consumed
-- [x] MOCK mode replays fixture from `fixtures/{agent}.jsonl`; error shown if no fixture exists
+- [x] Two-way `[LIVE][LOCAL]` mode toggle; mode sent in request body
+- [x] LOCAL mode runs rule-based planner against real DB — no Anthropic credits consumed; all three agents supported
 - [x] Token usage (`N in / N out tokens`) displayed in status bar for LIVE runs
-- [x] LIVE runs auto-save fixture to `fixtures/{agent}.jsonl` on completion
 - [x] `findings_json` structured object parsed into verdict banner + findings table + repeat offenders panel
+
+---
+
+---
+
+## EQ-139 · Extend LOCAL Mode to All Agents via Rule-Based Planners
+
+| Epic | Type | Branch |
+|------|------|--------|
+| AI Agent Monitoring | Enhancement | `EQ-139-local-mode-complex-agents` |
+
+**Purpose:** Replace single-agent LOCAL mode (duplicate only) with a planner architecture that covers all agents, removing MOCK entirely.
+
+**What changed:**
+- Removed MOCK mode from frontend toggle, `api.py`, and all docs — fixtures go stale and added maintenance overhead with no real benefit over LOCAL
+- Introduced `playbooks/` directory: one `run(question, call_tool)` function per agent that encodes the system prompt's decision rules in Python, calls real tool handlers, and emits the identical SSE event stream
+- Added `local_loop.py` — thin wrapper with the same interface as `streaming_loop.py`
+- `api.py` routes LOCAL requests to `PLAYBOOKS[agent].run` via `run_agent_local`; `call_tool` is shared between LOCAL and LIVE so each planner uses the correct dispatch (e.g. `_list_orders_slim` for duplicate)
+- Fixed `compliance.py` planner: API returns `code` not `type` in violation objects, and `WASH_SALE` not `WASH_SALE_VIOLATION` — planner now normalises both
+- Fixed `triage.py` planner: surfaces actual API error message when `get_order` returns a non-200 response instead of generic "Failed to parse order response"
+- UI: LIVE button colour changed to red (`#c0392b`); toggle moved above input row; input fills full container width with RUN beside it
+
+**Planner decision rules:**
+
+| Planner | Key logic |
+|---------|-----------|
+| `duplicate.py` | Group by `(userId, ticker, side, qty, price, type)` → sort → compute gap → HIGH/MED/LOW |
+| `compliance.py` | List REJECTED → fetch each compliance result → normalise violation code → group by userId → flag repeat offenders |
+| `triage.py` | Extract UUID from question (or fall back to most recent FAILED) → get_order → get_saga → query_audit_log → match COMPENSATING/TIMEOUT/COMPLIANCE/INSUFFICIENT_FUNDS rules |
+
+**Files created:** `local_loop.py`, `playbooks/__init__.py`, `playbooks/base.py`, `playbooks/duplicate.py`, `playbooks/compliance.py`, `playbooks/triage.py`
+
+**Files modified:** `api.py`, `AgentRunner.tsx`, `MODES.md`, `SPEC.md`, `CONTRIBUTION_PLAN.md`
+
+**Files removed:** `fixtures/duplicate.jsonl`
+
+**Acceptance Criteria:**
+- [x] LOCAL mode runs all three agents against real DB — no Anthropic credits consumed
+- [x] Same SSE event types emitted as LIVE (no `token_usage`)
+- [x] `· local` badge shown in status bar
+- [x] MOCK toggle removed from UI and backend
+- [x] `MODES.md` updated to two-mode architecture with planner docs
+- [x] Compliance planner correctly normalises `WASH_SALE` → `WASH_SALE_VIOLATION` and reads `code` field
+- [x] Triage planner surfaces actual API error when order is not found
+- [x] LIVE button is red; toggle is above input row; input fills full width
 
 ---
 
