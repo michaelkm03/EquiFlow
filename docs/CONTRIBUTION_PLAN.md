@@ -2135,6 +2135,70 @@ A "Test Data" panel sits above the agent list in the sidebar and is not tied to 
 
 ---
 
+## EQ-140 · Elevate BOT_OPERATOR Read Permissions Across Agent-Facing Endpoints
+
+| Epic | Type | Points |
+|------|------|--------|
+| AI Agent Monitoring | Security / Enhancement | 3 |
+
+**Purpose:** Allow bot-operator agents to fetch any order by UUID without an ownership filter, unblocking the triage agent and any future agent that needs cross-user read access.
+
+**Problem:**
+`GET /orders/{orderId}` calls `orderRepository.findByIdAndUserId(orderId, userId)` — it filters by both the order ID and the authenticated user's userId. Bot-operators authenticate as a service account (`bot-operator1`, userId `a1000000-0000-0000-0000-000000000003`) but the orders they need to triage belong to trader accounts. The endpoint returns `400 Order not found` even when the order exists.
+
+`GET /orders/internal/all` already bypasses ownership filtering for bot-operators (it passes `null` userId to `listOrders`). `GET /orders/{id}` should be consistent.
+
+**Root cause in `OrderService.java`:**
+```java
+public OrderResponse getOrder(UUID orderId, UUID userId) {
+    Order order = orderRepository.findByIdAndUserId(orderId, userId)  // ← filters by owner
+            .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+    return toResponse(order);
+}
+```
+
+**Implementation:**
+
+1. **`OrderController.java`** — check the caller's role before dispatching:
+```java
+@GetMapping("/{orderId}")
+public ResponseEntity<OrderResponse> getOrder(@PathVariable UUID orderId, Authentication auth) {
+    boolean isAgent = auth.getAuthorities().stream()
+            .anyMatch(a -> a.getAuthority().equals("ROLE_BOT_OPERATOR"));
+    if (isAgent) {
+        return ResponseEntity.ok(orderService.getOrderInternal(orderId));
+    }
+    return ResponseEntity.ok(orderService.getOrder(orderId, extractUserId(auth)));
+}
+```
+
+2. **`OrderService.java`** — add `getOrderInternal` (no ownership filter):
+```java
+public OrderResponse getOrderInternal(UUID orderId) {
+    Order order = orderRepository.findById(orderId)   // ← already used by triggerMatch
+            .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+    return toResponse(order);
+}
+```
+
+3. **`equiflow_data_server.py`** — no change needed; `handle_get_order` already calls `GET /orders/{id}` and the bot-operator token is used automatically.
+
+**Scope:** Read-only change. No write paths, no new endpoints, no schema changes. The bot-operator role already exists in JWT claims — this just adds a branch on it in one controller method.
+
+**Files to modify:**
+| File | Change |
+|------|--------|
+| `order-service/.../OrderController.java` | Add role check in `getOrder`, dispatch to `getOrderInternal` for BOT_OPERATOR |
+| `order-service/.../OrderService.java` | Add `getOrderInternal(UUID orderId)` using `findById` |
+
+**Acceptance Criteria:**
+- [ ] `GET /orders/{id}` returns the order for a BOT_OPERATOR token regardless of who owns the order
+- [ ] `GET /orders/{id}` still enforces ownership for TRADER tokens (no regression)
+- [ ] Triage agent LOCAL mode successfully fetches a FAILED order by UUID and proceeds to get_saga + audit_log steps
+- [ ] No changes to write endpoints (POST, DELETE, system-cancel)
+
+---
+
 ## Backlog — Approved, Not Yet Scheduled
 
 ---
