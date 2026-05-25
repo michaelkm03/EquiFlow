@@ -184,8 +184,7 @@ See `equiflow-mcp/MODES.md` for full details.
 | Mode | What runs | Use for |
 |---|---|---|
 | LIVE | Real Anthropic API + real DB | Demos, production parity |
-| LOCAL | Python logic + real DB (no LLM) | Duplicate Detection only — day-to-day dev |
-| MOCK | Static JSONL fixture replay | Pure UI work, no backend needed |
+| LOCAL | Rule-based planner + real DB (no LLM) | All agents — day-to-day dev, free |
 
 ### Seed & Cleanup
 

@@ -83,7 +83,7 @@ type RunStatus = 'idle' | 'running' | 'done' | 'error'
 type SeedStatus = 'idle' | 'running' | 'done' | 'error'
 
 export function AgentRunner() {
-  type RunMode = 'live' | 'local' | 'mock'
+  type RunMode = 'live' | 'local'
 
   const [selectedId, setSelectedId] = useState<string>(AGENTS.filter(a => a.ready)[0].id)
   const [question, setQuestion] = useState('')
@@ -361,12 +361,11 @@ export function AgentRunner() {
               disabled={status === 'running'}
               className="flex-1 rounded-md bg-white border border-zinc-300 text-zinc-900 placeholder-zinc-400 px-3 py-2 text-sm focus:outline-none focus:border-[#0b7a75] focus:ring-1 focus:ring-[#0b7a75]/15 disabled:opacity-40 transition-colors"
             />
-            {/* LIVE / LOCAL / MOCK toggle */}
+            {/* LIVE / LOCAL toggle */}
             <div className="flex rounded-md border border-zinc-200 overflow-hidden shrink-0 self-stretch">
               {([
                 { key: 'live',  label: 'LIVE',  active: 'bg-[#0b7a75] text-white', hover: 'hover:text-[#0b7a75]' },
                 { key: 'local', label: 'LOCAL', active: 'bg-[#19535f] text-white', hover: 'hover:text-[#19535f]' },
-                { key: 'mock',  label: 'MOCK',  active: 'bg-[#c47d0e] text-white', hover: 'hover:text-[#c47d0e]' },
               ] as const).map((m, i) => (
                 <>
                   {i > 0 && <div key={`sep-${m.key}`} className="w-px bg-zinc-200" />}
@@ -402,9 +401,9 @@ export function AgentRunner() {
             {status === 'running' && (
               <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                 <span className={`w-1.5 h-1.5 rounded-full animate-pulse inline-block ${
-                  mode === 'mock' ? 'bg-[#c47d0e]' : mode === 'local' ? 'bg-[#19535f]' : 'bg-[#0b7a75]'
+                  mode === 'local' ? 'bg-[#19535f]' : 'bg-[#0b7a75]'
                 }`} />
-                {mode === 'mock' ? 'Replaying…' : mode === 'local' ? 'Running local…' : 'Running…'}
+                {mode === 'local' ? 'Running local…' : 'Running…'}
               </div>
             )}
             {status === 'done' && (() => {
@@ -415,7 +414,6 @@ export function AgentRunner() {
                 <p className="text-[11px] text-zinc-400 font-mono">
                   {events.filter(e => e.type === 'tool_call').length} tool calls
                   {totalIn > 0 && <span className="ml-2">· {totalIn.toLocaleString()} in / {totalOut.toLocaleString()} out tokens</span>}
-                  {mode === 'mock'  && <span className="ml-2 text-[#c47d0e]">· mock</span>}
                   {mode === 'local' && <span className="ml-2 text-[#19535f]">· local</span>}
                 </p>
               )
