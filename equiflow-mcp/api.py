@@ -243,6 +243,14 @@ async def seed_agent_endpoint(req: SeedRequest):
             "--duration", str(duration_ms),
             "--duplicate-delay", gap,
         ]
+    elif req.agent == "escalation":
+        cmd = [sys.executable, "-u", str(SCRIPT_DIR / "seed_failed_orders.py")]
+        if req.level == "systemic":
+            cmd.append("--systemic")
+        elif req.level == "clean":
+            cmd.append("--clean")
+        elif req.level == "clean-systemic":
+            cmd += ["--systemic", "--clean"]
     else:
         async def no_seed_gen():
             yield {"data": json.dumps({"type": "error", "message": f"No seed script for agent: {req.agent}"})}
