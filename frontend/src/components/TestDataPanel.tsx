@@ -16,6 +16,10 @@ const ORDERS = [
   { label: 'REJECTED · INSUF_FUNDS',     id: 'b1000000-0000-0000-0000-000000000012', note: 'trader1 · NVDA 5000 qty' },
   { label: 'REJECTED · WASH_SALE',       id: 'b1000000-0000-0000-0000-000000000016', note: 'trader1 · TSLA' },
   { label: 'REJECTED · WASH_SALE',       id: 'b1000000-0000-0000-0000-000000000017', note: 'trader2 · AAPL' },
+  { label: 'FAILED · NETWORK_ERROR',     id: 'c1000000-0000-0000-0000-000000000001', note: 'trader1 · AAPL — expects RETRY' },
+  { label: 'FAILED · COMPLIANCE_REJ',    id: 'c1000000-0000-0000-0000-000000000002', note: 'trader1 · TSLA — expects NO_ACTION' },
+  { label: 'FAILED · INSUF_FUNDS',       id: 'c1000000-0000-0000-0000-000000000003', note: 'trader1 · NVDA — expects ESCALATE' },
+  { label: 'FAILED · COMPENSATING ★',   id: 'c1000000-0000-0000-0000-000000000004', note: 'trader2 · MSFT — expects ESCALATE' },
 ]
 
 function CopyRow({ label, id, note }: { label: string; id: string; note: string }) {
