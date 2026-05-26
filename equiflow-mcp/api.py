@@ -133,7 +133,7 @@ SCRIPT_DIR = Path(__file__).parent
 class RunRequest(BaseModel):
     agent: str
     question: str
-    mode: str = "live"  # "live" | "local"
+    mode: str = "local"  # "live" | "local"
 
 
 SEED_LEVELS = {

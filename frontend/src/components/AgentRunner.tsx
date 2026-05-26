@@ -89,7 +89,7 @@ export function AgentRunner() {
   const [question, setQuestion] = useState('')
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [status, setStatus] = useState<RunStatus>('idle')
-  const [mode, setMode] = useState<RunMode>('live')
+  const [mode, setMode] = useState<RunMode>('local')
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<(() => void) | null>(null)
 
