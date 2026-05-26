@@ -220,6 +220,97 @@ async def handle_create_incident(args: dict) -> list[TextContent]:
     return [TextContent(type="text", text=_json.dumps(payload))]
 
 
+async def handle_list_recent_failures(args: dict) -> list[TextContent]:
+    """Query FAILED orders in the last N minutes. Filters client-side by createdAt."""
+    import json as _json
+    from datetime import datetime as _dt, timezone, timedelta as _td, date as _date
+
+    minutes = int(args.get("minutes", 15))
+    failure_reason = args.get("failure_reason", "")
+
+    yesterday = _date.today() - _td(days=1)
+    tomorrow  = _date.today() + _td(days=1)
+    r = await authed_get(f"/orders/internal/all?status=FAILED&from={yesterday}&to={tomorrow}&size=100")
+    if not r.is_success:
+        return [TextContent(type="text", text=f"Error {r.status_code}: {r.text}")]
+
+    try:
+        orders  = r.json().get("content", [])
+        cutoff  = _dt.now(timezone.utc) - _td(minutes=minutes)
+        recent  = []
+        for o in orders:
+            try:
+                s = o.get("createdAt", "").replace("Z", "+00:00")
+                if "+" not in s:
+                    s += "+00:00"
+                if _dt.fromisoformat(s) >= cutoff:
+                    recent.append(o)
+            except Exception:
+                pass
+        count  = len(recent)
+        result = {
+            "failure_reason_filter": failure_reason or "ALL",
+            "window_minutes":        minutes,
+            "count":                 count,
+            "order_ids":             [o.get("id") for o in recent],
+            "systemic_threshold":    3,
+            "is_systemic":           count >= 3,
+        }
+    except Exception as e:
+        result = {
+            "failure_reason_filter": failure_reason or "ALL",
+            "window_minutes": minutes,
+            "count": 0, "order_ids": [], "is_systemic": False, "error": str(e),
+        }
+    return [TextContent(type="text", text=_json.dumps(result))]
+
+
+# Override service statuses here to demo FLAG_SYSTEMIC path (empty = all HEALTHY)
+_SERVICE_HEALTH: dict[str, str] = {}
+
+async def handle_get_service_health(args: dict) -> list[TextContent]:
+    """Mock service health check. Returns HEALTHY|DEGRADED|DOWN for a named service."""
+    import json as _json
+    service = args.get("service", "unknown")
+    result  = {
+        "service": service,
+        "status":  _SERVICE_HEALTH.get(service, "HEALTHY"),
+        "note":    "Mock — in production calls real status endpoint",
+    }
+    return [TextContent(type="text", text=_json.dumps(result))]
+
+
+async def handle_get_user_risk_profile(args: dict) -> list[TextContent]:
+    """Count FAILED orders for a user in the last 30 days and classify risk level."""
+    import json as _json
+    from datetime import date as _date, timedelta as _td
+
+    user_id    = args["user_id"]
+    from_date  = _date.today() - _td(days=30)
+    to_date    = _date.today() + _td(days=1)
+    r = await authed_get(
+        f"/orders/internal/all?status=FAILED&userId={user_id}&from={from_date}&to={to_date}&size=100"
+    )
+    try:
+        if not r.is_success:
+            raise ValueError(f"HTTP {r.status_code}")
+        data         = r.json()
+        total_failed = data.get("totalElements", len(data.get("content", [])))
+        risk_level   = "HIGH" if total_failed >= 10 else "MEDIUM" if total_failed >= 5 else "LOW"
+        profile      = {
+            "user_id":         user_id,
+            "total_failed_30d": total_failed,
+            "risk_level":      risk_level,
+            "window_days":     30,
+        }
+    except Exception as e:
+        profile = {
+            "user_id": user_id, "total_failed_30d": 0,
+            "risk_level": "UNKNOWN", "window_days": 30, "error": str(e),
+        }
+    return [TextContent(type="text", text=_json.dumps(profile))]
+
+
 HANDLERS = {
     "get_order":               handle_get_order,
     "list_orders":             handle_list_orders,
@@ -228,6 +319,9 @@ HANDLERS = {
     "get_compliance_result":   handle_get_compliance_result,
     "get_ledger_account":      handle_get_ledger_account,
     "create_incident":         handle_create_incident,
+    "list_recent_failures":    handle_list_recent_failures,
+    "get_service_health":      handle_get_service_health,
+    "get_user_risk_profile":   handle_get_user_risk_profile,
 }
 
 

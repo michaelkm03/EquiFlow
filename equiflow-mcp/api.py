@@ -20,6 +20,9 @@ from equiflow_data_server import (
     handle_query_audit_log,
     handle_get_ledger_account,
     handle_create_incident,
+    handle_list_recent_failures,
+    handle_get_service_health,
+    handle_get_user_risk_profile,
 )
 from mcp.types import TextContent
 from duplicate_agent   import SYSTEM_TEMPLATE as DUPLICATE_SYSTEM,   TOOLS as DUPLICATE_TOOLS
@@ -83,12 +86,15 @@ TRIAGE_DISPATCH = {
 }
 
 ESCALATION_DISPATCH = {
-    "list_orders":        handle_list_orders,
-    "get_order":          handle_get_order,
-    "get_saga":           handle_get_saga,
-    "query_audit_log":    handle_query_audit_log,
-    "get_ledger_account": handle_get_ledger_account,
-    "create_incident":    handle_create_incident,
+    "list_orders":           handle_list_orders,
+    "get_order":             handle_get_order,
+    "get_saga":              handle_get_saga,
+    "query_audit_log":       handle_query_audit_log,
+    "get_ledger_account":    handle_get_ledger_account,
+    "create_incident":       handle_create_incident,
+    "list_recent_failures":  handle_list_recent_failures,
+    "get_service_health":    handle_get_service_health,
+    "get_user_risk_profile": handle_get_user_risk_profile,
 }
 
 AGENTS = {

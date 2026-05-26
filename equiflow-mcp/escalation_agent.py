@@ -19,6 +19,9 @@ from equiflow_data_server import (
     handle_query_audit_log,
     handle_get_ledger_account,
     handle_create_incident,
+    handle_list_recent_failures,
+    handle_get_service_health,
+    handle_get_user_risk_profile,
 )
 
 # ---------------------------------------------------------------------------
@@ -29,44 +32,51 @@ SYSTEM_TEMPLATE = """
 You are an EquiFlow order failure escalation agent. Today is {today}.
 
 You may be invoked in two ways:
-1. A specific order ID is provided — call get_order immediately for that order.
-2. A time window question is asked — call list_orders(status=FAILED) to find all failures first.
+1. A specific order ID is provided — start Phase 1 immediately with get_order.
+2. A time window question — call list_orders(status=FAILED) to find all failures first.
 
-For every FAILED order, follow this exact sequence:
-  1. get_order(order_id)          → confirms status, gets saga_id, user_id, quantity, limitPrice
-  2. get_saga(saga_id)            → gets saga.status, saga.failureReason, failed stepName
-  3. query_audit_log(order_id)    → always call; count events containing "RETRY" → retry_count
+For every FAILED order, run this 5-phase pipeline:
 
-Then apply these decision rules:
+PHASE 1 — TRIAGE
+  get_order(order_id)        → saga_id, user_id, quantity, limitPrice
+  get_saga(saga_id)          → failure_reason (enum code), saga.status, failed stepName
+  query_audit_log(order_id)  → always call; count RETRY events → retry_count
 
-DECISION RULES:
-- saga.status == COMPENSATING
-    → create_incident(severity=CRITICAL, reason="Saga compensation — manual financial reconciliation required")
+PHASE 2 — PATTERN ANALYSIS
+  Only for infrastructure failures [NETWORK_ERROR, ORDER_MATCHING_FAILED, LEDGER_DEBIT_FAILED, SETTLEMENT_FAILED].
+  Skip Phase 2 for COMPLIANCE_REJECTED and INSUFFICIENT_FUNDS — those are never systemic.
+  list_recent_failures(failure_reason=<code>, minutes=15)
+  If count >= 3: systemic_risk=true
 
-- failureReason in [NETWORK_ERROR, ORDER_MATCHING_FAILED] and retry_count < 3
-    → RETRY — transient failure, re-submission recommended (retry_count from audit log)
+PHASE 3 — CONTEXT ENRICHMENT (branch by failure_reason)
+  COMPENSATING saga (always highest precedence — check this before systemic):
+    → verdict=ESCALATE, priority=CRITICAL, confidence=0.95
+    → create_incident(severity=CRITICAL, reason="Saga compensation — financial reconciliation required")
+    → if systemic_risk is also true: note in evidence[] but do not change verdict to FLAG_SYSTEMIC
+  Systemic pattern (count >= 3 from Phase 2):
+    → verdict=FLAG_SYSTEMIC, priority=HIGH, confidence=0.85
+    → create_incident(severity=HIGH)
+  Transient [NETWORK_ERROR, ORDER_MATCHING_FAILED]:
+    get_service_health(service=<matching-service or ledger-service>)
+    DEGRADED/DOWN → FLAG_SYSTEMIC, create_incident(severity=HIGH)
+    retry_count < 3 → RETRY, priority=LOW
+    retry_count >= 3 → ESCALATE, create_incident(severity=HIGH)
+  COMPLIANCE_REJECTED:
+    → NO_ACTION, priority=NONE, confidence=0.95
+  INSUFFICIENT_FUNDS:
+    get_user_risk_profile(user_id)
+    get_ledger_account(user_id)
+    total_failed_30d >= 5 → ESCALATE, create_incident(severity=MEDIUM)
+    availableCash < required → NO_ACTION (one-time shortfall)
+    availableCash >= required → INVESTIGATE (balance recovered)
+  Unrecognised:
+    → INVESTIGATE, priority=MEDIUM, confidence=0.50
 
-- failureReason in [NETWORK_ERROR, ORDER_MATCHING_FAILED] and retry_count >= 3
-    → create_incident(severity=HIGH, reason="Retry limit reached after {N} attempts")
+PHASE 4 — CONFIDENCE GUARD
+  If confidence < 0.6: downgrade verdict to INVESTIGATE
 
-- failureReason in [COMPLIANCE_REJECTED]
-    → NO_ACTION — expected rejection by compliance; retrying will not succeed
-
-- failureReason == INSUFFICIENT_FUNDS
-    → get_ledger_account(user_id)
-    → required = order.quantity * order.limitPrice
-    → if availableCash >= required: INVESTIGATE (balance recovered, manual retry possible)
-    → if availableCash < required:  create_incident(severity=HIGH, reason="Account balance still insufficient")
-
-- any other failureReason
-    → INVESTIGATE — unrecognised failure; manual review required
-
-Your final response must state for each order:
-- Root cause (exact failureReason from the data)
-- Action taken (RETRY / INVESTIGATE / ESCALATE / NO_ACTION)
-- Why
-
-Do not speculate beyond what the tools return. If data is missing, say so.
+PHASE 5 — VERDICT
+Do not speculate beyond what the tools return. Note missing data in evidence[].
 
 End your reply with this block (valid JSON, tags unchanged):
 
@@ -81,19 +91,23 @@ End your reply with this block (valid JSON, tags unchanged):
       "user_id": "<userId>",
       "ticker": "<ticker>",
       "failed_step": "<stepName or unknown>",
-      "failure_reason": "<exact failureReason code>",
+      "failure_reason": "<exact enum code>",
       "saga_status": "<FAILED|COMPENSATING>",
       "retry_count": <int>,
-      "action": "<RETRY|INVESTIGATE|ESCALATE|NO_ACTION>",
-      "incident_id": "<PD-XXXX or null>",
-      "explanation": "<one sentence>"
+      "systemic_risk": <true|false>,
+      "verdict": "<RETRY|NO_ACTION|INVESTIGATE|ESCALATE|FLAG_SYSTEMIC>",
+      "priority": "<CRITICAL|HIGH|MEDIUM|LOW|NONE>",
+      "confidence": <0.0-1.0>,
+      "evidence": ["<one sentence per signal>"],
+      "recommended_actions": ["<action taken>"],
+      "incident_id": "<PD-XXXX or null>"
     }}
   ],
-  "verdict": "<ALL_CLEAR|ESCALATE>"
+  "overall_verdict": "<ALL_CLEAR|ESCALATE|FLAG_SYSTEMIC>"
 }}
 </findings_json>
 
-verdict: ESCALATE if any incident was created. ALL_CLEAR if all actions are RETRY, INVESTIGATE, or NO_ACTION.
+overall_verdict: FLAG_SYSTEMIC if systemic pattern detected. ESCALATE if any incident created. ALL_CLEAR otherwise.
 """
 
 TOOLS = [
@@ -178,8 +192,8 @@ TOOLS = [
     {
         "name": "create_incident",
         "description": (
-            "Create a PagerDuty incident (mock). Call only when ESCALATE is warranted: "
-            "COMPENSATING sagas, retry limit exhausted, or insufficient funds confirmed. "
+            "Create a PagerDuty incident (mock). Call only when ESCALATE or FLAG_SYSTEMIC: "
+            "COMPENSATING sagas, retry limit exhausted, service outage, or chronic user failures. "
             "Returns an incident_id (PD-XXXXXXXX)."
         ),
         "input_schema": {
@@ -192,15 +206,64 @@ TOOLS = [
             "required": ["order_id", "severity", "reason"],
         },
     },
+    {
+        "name": "list_recent_failures",
+        "description": (
+            "Query FAILED orders in the last N minutes. Used in Phase 2 to detect systemic patterns. "
+            "Returns count, order_ids, and is_systemic (true if count >= 3). "
+            "Always call after Phase 1 triage before branching on failure_reason."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "failure_reason": {"type": "string", "description": "Failure reason code from Phase 1 (for context labeling)"},
+                "minutes":        {"type": "integer", "description": "Look-back window in minutes (default 15)"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "get_service_health",
+        "description": (
+            "Check health status of a named service. Returns HEALTHY, DEGRADED, or DOWN. "
+            "Call in Phase 3 for transient failures (NETWORK_ERROR, ORDER_MATCHING_FAILED) "
+            "to distinguish an isolated failure from a service-level outage."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "service": {"type": "string", "description": "Service name (e.g. matching-service, ledger-service)"},
+            },
+            "required": ["service"],
+        },
+    },
+    {
+        "name": "get_user_risk_profile",
+        "description": (
+            "Get a user's failure history over the last 30 days. "
+            "Returns total_failed_30d and risk_level (LOW/MEDIUM/HIGH). "
+            "Call in Phase 3 for INSUFFICIENT_FUNDS to detect chronic vs one-time failures."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "string", "description": "UUID of the user"},
+            },
+            "required": ["user_id"],
+        },
+    },
 ]
 
 DISPATCH = {
-    "list_orders":         handle_list_orders,
-    "get_order":           handle_get_order,
-    "get_saga":            handle_get_saga,
-    "query_audit_log":     handle_query_audit_log,
-    "get_ledger_account":  handle_get_ledger_account,
-    "create_incident":     handle_create_incident,
+    "list_orders":            handle_list_orders,
+    "get_order":              handle_get_order,
+    "get_saga":               handle_get_saga,
+    "query_audit_log":        handle_query_audit_log,
+    "get_ledger_account":     handle_get_ledger_account,
+    "create_incident":        handle_create_incident,
+    "list_recent_failures":   handle_list_recent_failures,
+    "get_service_health":     handle_get_service_health,
+    "get_user_risk_profile":  handle_get_user_risk_profile,
 }
 
 
