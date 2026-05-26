@@ -190,7 +190,7 @@ async def handle_list_orders(args: dict) -> list[TextContent]:
 
 
 async def handle_get_saga(args: dict) -> list[TextContent]:
-    return await _ok(await authed_get(f"/sagas/{args['saga_id']}"))
+    return await _ok(await authed_get(f"/saga/{args['saga_id']}"))
 
 
 async def handle_query_audit_log(args: dict) -> list[TextContent]:
@@ -201,12 +201,33 @@ async def handle_get_compliance_result(args: dict) -> list[TextContent]:
     return await _ok(await authed_get(f"/compliance/results/order/{args['order_id']}"))
 
 
+async def handle_get_ledger_account(args: dict) -> list[TextContent]:
+    return await _ok(await authed_get(f"/ledger/accounts/{args['user_id']}"))
+
+
+async def handle_create_incident(args: dict) -> list[TextContent]:
+    import uuid as _uuid
+    import json as _json
+    incident_id = f"PD-{str(_uuid.uuid4())[:8].upper()}"
+    payload = {
+        "incident_id": incident_id,
+        "order_id": args["order_id"],
+        "severity": args.get("severity", "HIGH"),
+        "reason": args["reason"],
+        "status": "triggered",
+        "note": "Mock incident — in production this calls PagerDuty Events API v2",
+    }
+    return [TextContent(type="text", text=_json.dumps(payload))]
+
+
 HANDLERS = {
     "get_order":               handle_get_order,
     "list_orders":             handle_list_orders,
     "get_saga":                handle_get_saga,
     "query_audit_log":         handle_query_audit_log,
     "get_compliance_result":   handle_get_compliance_result,
+    "get_ledger_account":      handle_get_ledger_account,
+    "create_incident":         handle_create_incident,
 }
 
 

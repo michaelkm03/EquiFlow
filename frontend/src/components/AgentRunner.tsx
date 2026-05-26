@@ -59,7 +59,7 @@ const AGENTS: AgentConfig[] = [
       'Escalate any failed orders from the last hour',
       'Investigate failed orders today',
     ],
-    ready: false,
+    ready: true,
   },
   {
     id: 'settlement',

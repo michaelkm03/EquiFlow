@@ -18,14 +18,18 @@ from equiflow_data_server import (
     handle_get_order,
     handle_get_saga,
     handle_query_audit_log,
+    handle_get_ledger_account,
+    handle_create_incident,
 )
 from mcp.types import TextContent
-from duplicate_agent import SYSTEM_TEMPLATE as DUPLICATE_SYSTEM, TOOLS as DUPLICATE_TOOLS
-from compliance_agent import SYSTEM_TEMPLATE as COMPLIANCE_SYSTEM, TOOLS as COMPLIANCE_TOOLS
-from agent import SYSTEM_TEMPLATE as TRIAGE_SYSTEM, TOOLS as TRIAGE_TOOLS
-import playbooks.duplicate  as _pb_duplicate
-import playbooks.compliance as _pb_compliance
-import playbooks.triage     as _pb_triage
+from duplicate_agent   import SYSTEM_TEMPLATE as DUPLICATE_SYSTEM,   TOOLS as DUPLICATE_TOOLS
+from compliance_agent  import SYSTEM_TEMPLATE as COMPLIANCE_SYSTEM,  TOOLS as COMPLIANCE_TOOLS
+from agent             import SYSTEM_TEMPLATE as TRIAGE_SYSTEM,      TOOLS as TRIAGE_TOOLS
+from escalation_agent  import SYSTEM_TEMPLATE as ESCALATION_SYSTEM,  TOOLS as ESCALATION_TOOLS
+import playbooks.duplicate   as _pb_duplicate
+import playbooks.compliance  as _pb_compliance
+import playbooks.triage      as _pb_triage
+import playbooks.escalation  as _pb_escalation
 
 app = FastAPI(title="EquiFlow Agent API")
 
@@ -72,10 +76,19 @@ COMPLIANCE_DISPATCH = {
     "get_compliance_result": handle_get_compliance_result,
 }
 TRIAGE_DISPATCH = {
-    "get_order": handle_get_order,
-    "get_saga": handle_get_saga,
-    "list_orders": handle_list_orders,
+    "get_order":       handle_get_order,
+    "get_saga":        handle_get_saga,
+    "list_orders":     handle_list_orders,
     "query_audit_log": handle_query_audit_log,
+}
+
+ESCALATION_DISPATCH = {
+    "list_orders":        handle_list_orders,
+    "get_order":          handle_get_order,
+    "get_saga":           handle_get_saga,
+    "query_audit_log":    handle_query_audit_log,
+    "get_ledger_account": handle_get_ledger_account,
+    "create_incident":    handle_create_incident,
 }
 
 AGENTS = {
@@ -94,12 +107,18 @@ AGENTS = {
         "tools":    TRIAGE_TOOLS,
         "dispatch": TRIAGE_DISPATCH,
     },
+    "escalation": {
+        "system":   ESCALATION_SYSTEM,
+        "tools":    ESCALATION_TOOLS,
+        "dispatch": ESCALATION_DISPATCH,
+    },
 }
 
 PLAYBOOKS = {
-    "duplicate":  _pb_duplicate,
-    "compliance": _pb_compliance,
-    "triage":     _pb_triage,
+    "duplicate":   _pb_duplicate,
+    "compliance":  _pb_compliance,
+    "triage":      _pb_triage,
+    "escalation":  _pb_escalation,
 }
 
 SCRIPT_DIR = Path(__file__).parent

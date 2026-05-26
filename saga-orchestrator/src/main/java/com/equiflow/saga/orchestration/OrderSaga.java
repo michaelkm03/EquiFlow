@@ -70,13 +70,13 @@ public class OrderSaga {
         });
 
         if ("FAILED".equals(step1.getStatus())) {
-            return failSaga(saga, "Compliance check failed: " + step1.getErrorMessage());
+            return failSaga(saga, "COMPLIANCE_REJECTED");
         }
 
         // Verify compliance approved
         String compResult = step1.getResponsePayload();
         if (compResult != null && compResult.contains("\"approved\":false")) {
-            return failSaga(saga, "Order rejected by compliance check");
+            return failSaga(saga, "COMPLIANCE_REJECTED");
         }
 
         // Step 2: Match order in order book — skip for STOP_LOSS (awaits price trigger)
@@ -94,8 +94,9 @@ public class OrderSaga {
         );
 
         if ("FAILED".equals(step2.getStatus())) {
-            // Compensate: nothing to undo for matching yet
-            return failSaga(saga, "Order matching failed: " + step2.getErrorMessage());
+            String msg = step2.getErrorMessage() != null ? step2.getErrorMessage().toLowerCase() : "";
+            String code = (msg.contains("timeout") || msg.contains("connection")) ? "NETWORK_ERROR" : "ORDER_MATCHING_FAILED";
+            return failSaga(saga, code);
         }
 
         // Step 3: Debit ledger (extract fill details from match response)
@@ -129,7 +130,16 @@ public class OrderSaga {
         });
 
         if ("FAILED".equals(step3.getStatus())) {
-            return failSaga(saga, "Ledger debit failed: " + step3.getErrorMessage());
+            String msg = step3.getErrorMessage() != null ? step3.getErrorMessage().toLowerCase() : "";
+            String code;
+            if (msg.contains("insufficient")) {
+                code = "INSUFFICIENT_FUNDS";
+            } else if (msg.contains("timeout") || msg.contains("connection")) {
+                code = "NETWORK_ERROR";
+            } else {
+                code = "LEDGER_DEBIT_FAILED";
+            }
+            return failSaga(saga, code);
         }
 
         // Step 4: Create settlement record
