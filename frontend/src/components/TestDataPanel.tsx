@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type SeedStatus = 'idle' | 'running' | 'done' | 'error'
+type SeedStatus  = 'idle' | 'running' | 'done' | 'error'
+type FetchStatus = 'idle' | 'loading' | 'done' | 'error'
 
 interface SeedLevel {
   label: string
@@ -10,10 +11,17 @@ interface SeedLevel {
   color: string
 }
 
-interface RefRow {
-  label: string
+interface LiveOrder {
   id: string
-  note: string
+  ticker: string
+  status: string
+  side: string
+}
+
+interface TestData {
+  escalation: LiveOrder[]
+  compliance: LiveOrder[]
+  triage: LiveOrder[]
 }
 
 interface AgentCard {
@@ -22,12 +30,12 @@ interface AgentCard {
   ticket: string
   description: string
   seedLevels: SeedLevel[]
-  refs: RefRow[]
+  dataKey: keyof TestData | null
   footnote: string | null
 }
 
-// ── Static data ───────────────────────────────────────────────────────────────
-const USERS: RefRow[] = [
+// ── Static config ─────────────────────────────────────────────────────────────
+const USERS = [
   { label: 'trader1',       id: 'a1000000-0000-0000-0000-000000000001', note: 'password123' },
   { label: 'trader2',       id: 'a1000000-0000-0000-0000-000000000004', note: 'password123' },
   { label: 'bot-operator1', id: 'a1000000-0000-0000-0000-000000000003', note: 'password123' },
@@ -44,7 +52,7 @@ const AGENT_CARDS: AgentCard[] = [
       { label: 'MED',  level: 'MED',  desc: '~2s gap',   color: 'bg-[#c47d0e] border-[#c47d0e] hover:bg-[#9e6409] hover:border-[#9e6409]' },
       { label: 'LOW',  level: 'LOW',  desc: '~7s gap',   color: 'bg-[#19535f] border-[#19535f] hover:bg-[#0f3840] hover:border-[#0f3840]' },
     ],
-    refs: [],
+    dataKey: null,
     footnote: 'After seeding, ask: "Find duplicate orders today"',
   },
   {
@@ -56,13 +64,8 @@ const AGENT_CARDS: AgentCard[] = [
       { label: 'STANDARD', level: 'standard', desc: 'One of each failure type', color: 'bg-[#19535f] border-[#19535f] hover:bg-[#0f3840] hover:border-[#0f3840]' },
       { label: 'SYSTEMIC', level: 'systemic', desc: '3 NETWORK_ERROR orders',   color: 'bg-[#7b2d26] border-[#7b2d26] hover:bg-[#5e2219] hover:border-[#5e2219]' },
     ],
-    refs: [
-      { label: 'FAILED · NETWORK_ERROR',   id: 'c1000000-0000-0000-0000-000000000001', note: 'AAPL → RETRY' },
-      { label: 'FAILED · COMPLIANCE_REJ',  id: 'c1000000-0000-0000-0000-000000000002', note: 'TSLA → NO_ACTION' },
-      { label: 'FAILED · INSUF_FUNDS',     id: 'c1000000-0000-0000-0000-000000000003', note: 'NVDA → INVESTIGATE' },
-      { label: 'FAILED · COMPENSATING ★', id: 'c1000000-0000-0000-0000-000000000004', note: 'MSFT → ESCALATE CRITICAL' },
-    ],
-    footnote: '★ COMPENSATING always ESCALATE CRITICAL · ⏱ SYSTEMIC seed expires after 15 min',
+    dataKey: 'escalation',
+    footnote: '⏱ SYSTEMIC seed expires after 15 min',
   },
   {
     id: 'compliance',
@@ -70,14 +73,8 @@ const AGENT_CARDS: AgentCard[] = [
     ticket: 'EQ-136',
     description: 'Summarizes wash-sale and insufficient-funds violations and flags repeat-breach accounts.',
     seedLevels: [],
-    refs: [
-      { label: 'REJECTED · INSUF_FUNDS',  id: 'b1000000-0000-0000-0000-000000000010', note: 'trader1 · AAPL 9999 qty' },
-      { label: 'REJECTED · WASH_SALE ★',  id: 'b1000000-0000-0000-0000-000000000011', note: 'trader2 · TSLA — cross-user' },
-      { label: 'REJECTED · INSUF_FUNDS',  id: 'b1000000-0000-0000-0000-000000000012', note: 'trader1 · NVDA 5000 qty' },
-      { label: 'REJECTED · WASH_SALE',    id: 'b1000000-0000-0000-0000-000000000016', note: 'trader1 · TSLA' },
-      { label: 'REJECTED · WASH_SALE',    id: 'b1000000-0000-0000-0000-000000000017', note: 'trader2 · AAPL' },
-    ],
-    footnote: '★ EQ-140: bot-operator1 reading trader2\'s order',
+    dataKey: 'compliance',
+    footnote: null,
   },
   {
     id: 'triage',
@@ -85,35 +82,59 @@ const AGENT_CARDS: AgentCard[] = [
     ticket: 'EQ-136',
     description: 'Traces the saga and audit trail of a specific order to pinpoint root cause.',
     seedLevels: [],
-    refs: [
-      { label: 'PENDING',   id: 'b1000000-0000-0000-0000-000000000001', note: 'trader1 · AAPL BUY MARKET' },
-      { label: 'OPEN',      id: 'b1000000-0000-0000-0000-000000000002', note: 'trader1 · TSLA BUY LIMIT' },
-      { label: 'FILLED',    id: 'b1000000-0000-0000-0000-000000000004', note: 'trader1 · MSFT BUY' },
-      { label: 'CANCELLED', id: 'b1000000-0000-0000-0000-000000000005', note: 'trader1 · GOOG SELL' },
-    ],
+    dataKey: 'triage',
     footnote: null,
   },
 ]
 
-// ── CopyRow ───────────────────────────────────────────────────────────────────
-function CopyRow({ label, id, note }: RefRow) {
-  const [copied, setCopied] = useState(false)
+const STATUS_COLOR: Record<string, string> = {
+  FAILED:    'text-[#7b2d26]',
+  REJECTED:  'text-[#c47d0e]',
+  PENDING:   'text-zinc-500',
+  OPEN:      'text-[#0b7a75]',
+  FILLED:    'text-[#19535f]',
+  CANCELLED: 'text-zinc-400',
+}
 
+// ── Sub-components ────────────────────────────────────────────────────────────
+function CopyRow({ label, id, note }: { label: string; id: string; note: string }) {
+  const [copied, setCopied] = useState(false)
   function copy() {
     navigator.clipboard.writeText(id)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }
-
   return (
     <tr className="hover:bg-zinc-50 cursor-pointer group" onClick={copy} title={`Click to copy: ${id}`}>
       <td className="py-0.5 pr-2 text-[10px] text-zinc-600 whitespace-nowrap font-medium">{label}</td>
       <td className="py-0.5 pr-2 font-mono text-[9px] text-zinc-400 whitespace-nowrap">{id}</td>
       <td className="py-0.5 pr-1 text-[9px] text-zinc-400 whitespace-nowrap">{note}</td>
       <td className="py-0.5 w-8 text-right text-[9px]">
-        {copied
-          ? <span className="text-[#0b7a75]">✓</span>
-          : <span className="text-zinc-300 group-hover:text-zinc-500">copy</span>}
+        {copied ? <span className="text-[#0b7a75]">✓</span> : <span className="text-zinc-300 group-hover:text-zinc-500">copy</span>}
+      </td>
+    </tr>
+  )
+}
+
+function LiveOrderRow({ order }: { order: LiveOrder }) {
+  const [copied, setCopied] = useState(false)
+  function copy() {
+    navigator.clipboard.writeText(order.id)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+  return (
+    <tr className="hover:bg-zinc-50 cursor-pointer group" onClick={copy} title={`Click to copy: ${order.id}`}>
+      <td className={`py-0.5 pr-2 text-[10px] font-mono font-semibold whitespace-nowrap ${STATUS_COLOR[order.status] ?? 'text-zinc-500'}`}>
+        {order.status}
+      </td>
+      <td className="py-0.5 pr-2 font-mono font-semibold text-[11px] text-zinc-800">{order.ticker}</td>
+      {order.side
+        ? <td className="py-0.5 pr-2 font-mono text-[10px] text-zinc-400">{order.side}</td>
+        : <td className="py-0.5 pr-2" />}
+      <td className="py-0.5 pr-1 font-mono text-[9px] text-zinc-400">{order.id.slice(0, 8)}…</td>
+      <td className="py-0.5 w-8 text-right text-[9px]">
+        {copied ? <span className="text-[#0b7a75]">✓</span> : <span className="text-zinc-300 group-hover:text-zinc-500">copy</span>}
       </td>
     </tr>
   )
@@ -121,9 +142,28 @@ function CopyRow({ label, id, note }: RefRow) {
 
 // ── TestDataPanel ─────────────────────────────────────────────────────────────
 export function TestDataPanel() {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen]             = useState(false)
   const [seedStatus, setSeedStatus] = useState<Record<string, SeedStatus>>({})
-  const [seedLogs, setSeedLogs] = useState<Record<string, string[]>>({})
+  const [seedLogs, setSeedLogs]     = useState<Record<string, string[]>>({})
+  const [testData, setTestData]     = useState<TestData | null>(null)
+  const [fetchStatus, setFetchStatus] = useState<FetchStatus>('idle')
+
+  async function fetchTestData() {
+    setFetchStatus('loading')
+    try {
+      const res = await fetch('/api/test-data')
+      if (!res.ok) throw new Error()
+      setTestData(await res.json())
+      setFetchStatus('done')
+    } catch {
+      setFetchStatus('error')
+    }
+  }
+
+  // Fetch when panel first opens
+  useEffect(() => {
+    if (open && fetchStatus === 'idle') fetchTestData()
+  }, [open])
 
   async function seedAgent(agentId: string, level: string) {
     setSeedStatus(prev => ({ ...prev, [agentId]: 'running' }))
@@ -147,11 +187,9 @@ export function TestDataPanel() {
     while (true) {
       const { done, value } = await reader.read()
       if (done) break
-
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
       buffer = lines.pop() ?? ''
-
       for (const line of lines) {
         if (!line.startsWith('data:')) continue
         const raw = line.slice(5).trim()
@@ -162,13 +200,12 @@ export function TestDataPanel() {
             setSeedLogs(prev => ({ ...prev, [agentId]: [...(prev[agentId] ?? []), event.line] }))
           } else if (event.type === 'done') {
             setSeedStatus(prev => ({ ...prev, [agentId]: 'done' }))
+            fetchTestData()
           } else if (event.type === 'error') {
             setSeedLogs(prev => ({ ...prev, [agentId]: [...(prev[agentId] ?? []), `ERROR: ${event.message}`] }))
             setSeedStatus(prev => ({ ...prev, [agentId]: 'error' }))
           }
-        } catch {
-          // skip malformed SSE lines
-        }
+        } catch { /* skip malformed */ }
       }
     }
   }
@@ -181,7 +218,13 @@ export function TestDataPanel() {
           {/* Panel header */}
           <div className="px-4 py-2.5 border-b border-zinc-100 sticky top-0 bg-white z-10 flex items-center justify-between">
             <span className="text-xs font-semibold text-zinc-700 tracking-wide">Test Data</span>
-            <span className="text-[10px] text-zinc-300">click UUIDs to copy</span>
+            <button
+              onClick={fetchTestData}
+              disabled={fetchStatus === 'loading'}
+              className="text-[10px] text-zinc-400 hover:text-zinc-600 disabled:opacity-40 transition-colors font-mono"
+            >
+              {fetchStatus === 'loading' ? 'loading…' : '↻ refresh'}
+            </button>
           </div>
 
           {/* Shared users */}
@@ -196,8 +239,10 @@ export function TestDataPanel() {
 
           {/* Per-agent cards */}
           {AGENT_CARDS.map((card, i) => {
-            const status = seedStatus[card.id]
-            const logs   = seedLogs[card.id] ?? []
+            const status  = seedStatus[card.id]
+            const logs    = seedLogs[card.id] ?? []
+            const orders  = card.dataKey ? (testData?.[card.dataKey] ?? []) : []
+            const hasData = card.dataKey !== null
 
             return (
               <div key={card.id} className={`px-4 py-3 ${i < AGENT_CARDS.length - 1 ? 'border-b border-zinc-100' : ''}`}>
@@ -226,8 +271,6 @@ export function TestDataPanel() {
                         </button>
                       ))}
                     </div>
-
-                    {/* Inline seed log */}
                     {status && status !== 'idle' && (
                       <div className="mt-1.5 bg-zinc-50 border border-zinc-100 rounded px-2 py-1.5 max-h-[72px] overflow-y-auto">
                         {logs.slice(-6).map((line, j) => (
@@ -240,16 +283,21 @@ export function TestDataPanel() {
                   </div>
                 )}
 
-                {/* Reference IDs */}
-                {card.refs.length > 0 && (
-                  <>
-                    <p className="text-[10px] text-zinc-300 font-semibold uppercase tracking-wide mb-1">Reference IDs</p>
+                {/* Live orders */}
+                {hasData && (
+                  fetchStatus === 'loading' ? (
+                    <p className="text-[10px] text-zinc-300 font-mono">loading…</p>
+                  ) : fetchStatus === 'error' ? (
+                    <p className="text-[10px] text-[#7b2d26] font-mono">failed to load</p>
+                  ) : orders.length > 0 ? (
                     <table className="w-full">
                       <tbody>
-                        {card.refs.map(r => <CopyRow key={r.id} {...r} />)}
+                        {orders.map(o => <LiveOrderRow key={o.id} order={o} />)}
                       </tbody>
                     </table>
-                  </>
+                  ) : (
+                    <p className="text-[10px] text-zinc-300 font-mono italic">no data — seed first</p>
+                  )
                 )}
 
                 {card.footnote && (

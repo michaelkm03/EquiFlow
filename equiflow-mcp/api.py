@@ -278,3 +278,40 @@ async def seed_agent_endpoint(req: SeedRequest):
 @app.get("/api/agents")
 async def list_agents():
     return {"agents": list(AGENTS.keys())}
+
+
+@app.get("/api/test-data")
+async def get_test_data():
+    import asyncio as _asyncio
+
+    statuses = [
+        ("FAILED",    "escalation"),
+        ("REJECTED",  "compliance"),
+        ("PENDING",   "triage"),
+        ("OPEN",      "triage"),
+        ("FILLED",    "triage"),
+        ("CANCELLED", "triage"),
+    ]
+
+    results = await _asyncio.gather(
+        *[handle_list_orders({"status": s, "size": 10}) for s, _ in statuses]
+    )
+
+    grouped: dict = {"escalation": [], "compliance": [], "triage": []}
+
+    for (_, group), res in zip(statuses, results):
+        if not res:
+            continue
+        try:
+            data = json.loads(res[0].text)
+            for o in data.get("content", []):
+                grouped[group].append({
+                    "id":     o["id"],
+                    "ticker": o.get("ticker", "?"),
+                    "status": o.get("status", "?"),
+                    "side":   o.get("side", ""),
+                })
+        except Exception:
+            pass
+
+    return grouped
