@@ -1,7 +1,7 @@
 import { test, expect, APIRequestContext } from '@playwright/test';
 
-const AUTH_URL = process.env['AUTH_URL'] || 'http://localhost:8081';
-const GATEWAY_URL = process.env['BASE_URL'] || 'http://localhost:8080';
+const AUTH_URL = process.env.AUTH_URL || 'http://localhost:8081';
+const GATEWAY_URL = process.env.BASE_URL || 'http://localhost:8080';
 
 let authToken: string;
 let apiRequest: APIRequestContext;
@@ -110,6 +110,43 @@ test.describe('Order Service', () => {
     expect(body).toHaveProperty('content');
     expect(body).toHaveProperty('totalElements');
     expect(Array.isArray(body.content)).toBe(true);
+  });
+
+  // EQ-140: BOT_OPERATOR role must be able to read any order via GET /orders/{id}
+  test('BOT_OPERATOR can read any order by ID', async ({ playwright }) => {
+    // Authenticate as bot-operator1
+    const authCtx = await playwright.request.newContext({ baseURL: AUTH_URL });
+    const loginResp = await authCtx.post('/auth/token', {
+      data: { username: 'bot-operator1', password: 'password123' },
+    });
+    expect(loginResp.status()).toBe(200);
+    const { token: botToken } = await loginResp.json();
+    await authCtx.dispose();
+
+    // Place an order as trader1 first so we have a known order ID to look up
+    const placeResp = await apiRequest.post('/orders', {
+      data: { ticker: 'AAPL', side: 'BUY', type: 'MARKET', quantity: 1 },
+    });
+    if (placeResp.status() === 409) {
+      test.skip(); // Market closed
+      return;
+    }
+    expect(placeResp.status()).toBe(201);
+    const { id: orderId } = await placeResp.json();
+
+    // Now read it as bot-operator1 — should succeed (EQ-140 grants BOT_OPERATOR read access)
+    const botCtx = await playwright.request.newContext({
+      baseURL: GATEWAY_URL,
+      extraHTTPHeaders: {
+        Authorization: `Bearer ${botToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    const getResp = await botCtx.get(`/orders/${orderId}`);
+    expect(getResp.status()).toBe(200);
+    const order = await getResp.json();
+    expect(order).toHaveProperty('id', orderId);
+    await botCtx.dispose();
   });
 
   test('poll order until FILLED or OPEN', async () => {

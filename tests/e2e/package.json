@@ -8,6 +8,9 @@
     "test:auth": "playwright test tests/auth.spec.ts",
     "test:orders": "playwright test tests/orders.spec.ts",
     "test:compliance": "playwright test tests/compliance.spec.ts",
+    "test:market": "playwright test tests/market-data.spec.ts",
+    "test:ledger": "playwright test tests/ledger.spec.ts",
+    "test:audit": "playwright test tests/audit.spec.ts",
     "report": "playwright show-report"
   },
   "devDependencies": {
