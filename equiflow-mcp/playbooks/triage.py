@@ -108,13 +108,22 @@ async def run(question: str, call_tool: Callable) -> AsyncGenerator[dict, None]:
     else:
         recommendation = "INVESTIGATE — unrecognised failure pattern. Manual review required."
 
-    answer = "\n".join([
-        f"Order:      {order_id}",
-        f"Ticker:     {ticker}  |  Status: {status}  |  User: {user_id}",
-        f"Failed step: {failed_step or 'unknown'}",
-        f"Failure reason: {failure_reason or 'unknown'}",
-        f"Retries:    {effective_retries}",
-        f"Recommendation: {recommendation}",
-    ])
+    # Extract verb and reasoning from recommendation string
+    verb = recommendation.split(" ")[0].rstrip("—").rstrip("-").strip()
+    reasoning = recommendation[len(verb):].lstrip(" —-").strip()
 
+    findings = {
+        "order_id":       order_id,
+        "ticker":         ticker,
+        "status":         status,
+        "user_id":        user_id,
+        "saga_status":    saga_status or "unknown",
+        "failed_step":    failed_step or "unknown",
+        "failure_reason": failure_reason or "unknown",
+        "retry_count":    effective_retries,
+        "recommendation": verb,
+        "reasoning":      reasoning,
+    }
+
+    answer = f"<findings_json>\n{json.dumps(findings, indent=2)}\n</findings_json>"
     yield {"type": "done", "answer": answer}

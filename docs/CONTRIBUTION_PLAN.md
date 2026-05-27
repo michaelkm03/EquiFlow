@@ -3,7 +3,7 @@
 **Status:** Approved
 **Product Owner:** Claude
 **Engineering Lead:** Michael Montgomery
-**Last Updated:** 2026-05-22
+**Last Updated:** 2026-05-26
 
 ---
 
@@ -1152,7 +1152,7 @@ Each agent builds on the existing `run_agent()` loop in `equiflow-mcp/loop.py` a
 | ⚪ | <nobr>[EQ-133](#eq-133--agent-test-suite-compliance-agent)</nobr> | Agent Test Suite — Compliance Agent | 3 | P1 — depends on EQ-130 |
 | ~~⚪~~ | ~~EQ-131 · Scheduled EOD Settlement Reconciliation Agent~~ | ~~removed — problem already solved by existing `/settlement/pending` endpoint~~ | ~~5~~ | ~~P1~~ |
 | ⚪ | <nobr>[EQ-134](#eq-134--agent-test-suite-settlement-reconciliation-agent)</nobr> | Agent Test Suite — Settlement Reconciliation Agent | 3 | P1 — reserved for future settlement agent |
-| ⚪ | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 — depends on EQ-140 for LIVE mode |
+| 🔵 | <nobr>[EQ-132](#eq-132--triggered-order-failure-escalation-agent)</nobr> | Triggered Order Failure Escalation Agent | 5 | P1 — 5-phase redesign implemented; pending test sign-off |
 | ⚪ | <nobr>[EQ-135](#eq-135--agent-test-suite-order-failure-escalation-agent)</nobr> | Agent Test Suite — Order Failure Escalation Agent | 3 | P1 — depends on EQ-132 |
 | ✅ | <nobr>[EQ-136](#eq-136--duplicate-order-detection-agent)</nobr> | Duplicate Order Detection Agent | 5 | P1 |
 | ✅ | <nobr>[EQ-137](#eq-137--agent-visualization-frontend)</nobr> | Agent Visualization Frontend — React + FastAPI SSE live step timeline | 5 | P1 |
@@ -1266,14 +1266,17 @@ for message in consumer:
 
 ### Tools
 
-| Tool | Status | Purpose |
-|------|--------|---------|
-| `list_orders` | Existing | On-demand mode: scan for FAILED orders in time window |
-| `get_order` | Existing | Confirm failure status and retrieve `sagaId`, `userId`, `quantity`, `limitPrice` |
-| `get_saga` | Existing | Returns `saga.failureReason` (enum code), `saga.status`, and `steps[].stepName` for the failed step. No `retryCount` field exists on this model. |
-| `query_audit_log` | Existing | **Primary source of retry count** — count events where the event name contains "RETRY". Also fetched for full context when saga is COMPENSATING. Always called as part of the decision flow. |
-| `get_ledger_account` | **New** | `GET /ledger/accounts/{userId}` — returns `availableCash`, `cashBalance`, `cashOnHold`. Used in the INSUFFICIENT_FUNDS branch to check if the user can now afford the order. Handler added to `equiflow_data_server.py`. |
-| `create_incident` | **New** | Mock PagerDuty — returns a fake incident ID. Handler added to `equiflow_data_server.py`. In production this would call the real PagerDuty Events API. |
+| Tool | Status | Phase | Purpose |
+|------|--------|-------|---------|
+| `list_orders` | Existing | Scan | On-demand mode: scan for FAILED orders in time window |
+| `get_order` | Existing | Phase 1 | Confirm failure status and retrieve `sagaId`, `userId`, `quantity`, `limitPrice` |
+| `get_saga` | Existing | Phase 1 | Returns `saga.failureReason` (enum code), `saga.status`, and `steps[].stepName` for the failed step. No `retryCount` field exists on this model. |
+| `query_audit_log` | Existing | Phase 1 | **Primary source of retry count** — count events where the event name contains "RETRY". Always called. |
+| `list_recent_failures` | **New** | Phase 2 | Query FAILED orders in last N minutes with optional `failure_reason` filter; returns count + order IDs. Used to detect systemic patterns (≥ 3 orders = systemic). |
+| `get_service_health` | **New** | Phase 3 | Mock service status check; returns `status: HEALTHY\|DEGRADED\|DOWN`. Called in transient failure branch to distinguish isolated failure from service outage. |
+| `get_user_risk_profile` | **New** | Phase 3 | Returns `total_failed_30d`, `failure_reasons`, `risk_level` for a user. Called in INSUFFICIENT_FUNDS branch to detect chronic vs one-time failures. |
+| `get_ledger_account` | Existing | Phase 3 | `GET /ledger/accounts/{userId}` — returns `availableCash`, `cashBalance`, `cashOnHold`. Used in INSUFFICIENT_FUNDS branch to check current balance against required. |
+| `create_incident` | Existing | Phase 5 | Mock PagerDuty — returns a fake incident ID. Called only when ESCALATE or FLAG_SYSTEMIC verdict with HIGH+ priority. |
 
 **`get_ledger_account` handler:**
 ```python
@@ -1300,64 +1303,122 @@ async def handle_create_incident(args: dict) -> list[TextContent]:
 
 ---
 
+### Enhanced Agent Architecture (5-Phase Redesign)
+
+The escalation agent runs a 5-phase pipeline per order. Earlier phases gate later ones — Phase 2 pattern analysis can short-circuit to FLAG_SYSTEMIC before Phase 3 context enrichment runs.
+
+```
+Phase 1 — Triage       get_order → get_saga → query_audit_log
+Phase 2 — Pattern      list_recent_failures(failure_reason, minutes=15)
+Phase 3 — Enrichment   get_service_health  (transient branch)
+                        get_user_risk_profile + get_ledger_account  (INSUFFICIENT_FUNDS branch)
+Phase 4 — Confidence   compute 0.0–1.0 score based on evidence quality
+Phase 5 — Verdict      emit findings_json with confidence, priority, systemic_risk, evidence[]
+```
+
 ### Decision Rules
 
-| Condition | Action | Incident? |
-|---|---|---|
-| `saga.status == COMPENSATING` | ESCALATE — always; financial reconciliation required regardless of failure reason | Yes |
-| `failure_reason` in `[TIMEOUT, NETWORK_ERROR]` AND `retry_count < 3` | RETRY — transient; recommend manual re-submission | No |
-| `failure_reason` in `[TIMEOUT, NETWORK_ERROR]` AND `retry_count >= 3` | ESCALATE — retries exhausted | Yes |
-| `failure_reason` in `[COMPLIANCE_REJECTED, ORDER_MATCHING_FAILED]` | NO_ACTION — expected rejection or upstream refusal, not a system failure | No |
-| `failure_reason == INSUFFICIENT_FUNDS` AND `availableCash >= required` | INVESTIGATE — balance now sufficient; recommend manual settlement retry | No |
-| `failure_reason == INSUFFICIENT_FUNDS` AND `availableCash < required` | ESCALATE — account holder must be contacted | Yes |
+| Condition | Verdict | Priority | Confidence | Incident? |
+|---|---|---|---|---|
+| `saga.status == COMPENSATING` | ESCALATE | CRITICAL | 0.95 | Yes |
+| Phase 2: ≥ 3 orders same `failure_reason` in 15 min | FLAG_SYSTEMIC | HIGH | 0.85 | Yes |
+| Transient + `get_service_health` returns DEGRADED/DOWN | FLAG_SYSTEMIC | HIGH | 0.90 | Yes |
+| Transient + `retry_count < 3` | RETRY | LOW | 0.90 | No |
+| Transient + `retry_count >= 3` | ESCALATE | HIGH | 0.90 | Yes |
+| `failure_reason == COMPLIANCE_REJECTED` | NO_ACTION | NONE | 0.95 | No |
+| `INSUFFICIENT_FUNDS` + `risk_profile.total_failed_30d >= 5` | ESCALATE | MEDIUM | 0.80 | Yes |
+| `INSUFFICIENT_FUNDS` + `availableCash < required` (one-time) | NO_ACTION | LOW | 0.85 | No |
+| `INSUFFICIENT_FUNDS` + `availableCash >= required` | INVESTIGATE | LOW | 0.80 | No |
+| Unrecognised `failure_reason` | INVESTIGATE | MEDIUM | 0.50 | No |
 
-> **Retry count source:** No `retryCount` field exists on `Saga` or `SagaStep`. Retry count is derived by counting audit log events where the event name contains "RETRY" for this order ID (`query_audit_log`). The system does not auto-retry — ops must re-submit manually — so retry_count is typically 0 in practice, meaning the RETRY branch fires. The `>= 3 → ESCALATE` branch becomes meaningful once a formal retry endpoint is added.
+> **Verdict types:** `RETRY`, `NO_ACTION`, `INVESTIGATE`, `ESCALATE`, `FLAG_SYSTEMIC`. `FLAG_SYSTEMIC` indicates a pattern affecting multiple orders — ops team action, not just one incident.
 
-> **`failure_reason` values are enum codes** set in `OrderSaga.failSaga()`: `COMPLIANCE_REJECTED`, `ORDER_MATCHING_FAILED`, `INSUFFICIENT_FUNDS`, `LEDGER_DEBIT_FAILED`, `SETTLEMENT_FAILED`, `NETWORK_ERROR`, `TIMEOUT`. These are standardized as part of EQ-132 (Java change). Previously the field stored free-form natural-language strings.
+> **Confidence** is 0.0–1.0. Below 0.6 → verdict downgraded to INVESTIGATE regardless of branch. Confidence drops when evidence is incomplete (missing saga, empty audit log, handler errors).
 
-> **`required` for INSUFFICIENT_FUNDS:** computed as `order.quantity × order.limitPrice` using values already fetched by `get_order`. `AccountResponse.availableCash` is compared against this.
+> **Systemic detection:** `list_recent_failures` queries all FAILED orders in the last 15 minutes (handler does not filter by failure_reason — the parameter is context only). Only called for infrastructure failures: `NETWORK_ERROR`, `ORDER_MATCHING_FAILED`, `LEDGER_DEBIT_FAILED`, `SETTLEMENT_FAILED`. If count ≥ 3, `systemic_risk=true`. `COMPENSATING` sagas always produce ESCALATE CRITICAL regardless — systemic context is added to evidence[] but does not override the verdict.
 
-> **Saga step field names:** `SagaStep.stepName` (not `name`), `SagaStep.errorMessage` (not `failureReason`). The top-level `Saga.failureReason` is the authoritative failure code.
+> **Retry count source:** No `retryCount` field exists on `Saga` or `SagaStep`. Derived by counting audit log events where the event name contains "RETRY" (`query_audit_log`). System does not auto-retry — retry_count is typically 0.
 
-> **Note on saga status:** `COMPENSATING` (not `COMPENSATION_REQUIRED`) is the correct saga status. It means the orchestrator is actively rolling back a partial transaction. Check `saga.status`, not order status.
+> **`failure_reason` values are enum codes** set in `OrderSaga.failSaga()`: `COMPLIANCE_REJECTED`, `ORDER_MATCHING_FAILED`, `INSUFFICIENT_FUNDS`, `LEDGER_DEBIT_FAILED`, `NETWORK_ERROR`, `TIMEOUT`. Standardized as part of EQ-132.
+
+> **`required` for INSUFFICIENT_FUNDS:** `order.quantity × order.limitPrice` from the already-fetched `get_order` result.
+
+> **Saga step field names:** `SagaStep.stepName` (not `name`), `SagaStep.errorMessage` (not `failureReason`). The top-level `Saga.failureReason` is authoritative.
 
 ---
 
 ### Branching Logic
 
 ```
-# On-demand mode: scan for failures
+# ── Scan mode (on-demand): find failures first ──────────────────────────────
 list_orders(status=FAILED, from=<window>)
-  → for each order:
-      → get_order(order_id)           # get saga_id, user_id, quantity, limitPrice
-      → get_saga(saga_id)             # get failed_step (stepName), failure_reason (saga.failureReason), saga.status
-      → query_audit_log(order_id)     # always fetch — count RETRY events → retry_count
+  → for each order: run 5-phase pipeline below
 
-# Both modes: decide per order
-retry_count = len([e for e in audit_events if "RETRY" in e["event"].upper()])
-required    = order.quantity × order.limitPrice   # used only in INSUFFICIENT_FUNDS branch
+# ── Triggered mode (Kafka): single order_id passed as arg ───────────────────
+# Skip list_orders, run 5-phase pipeline directly
 
+# ── 5-Phase pipeline per order ───────────────────────────────────────────────
+
+# Phase 1 — Triage
+get_order(order_id)           # saga_id, user_id, quantity, limitPrice
+get_saga(saga_id)             # failure_reason (enum code), saga.status, failed stepName
+query_audit_log(order_id)     # always; count RETRY events → retry_count
+retry_count = count("RETRY" in event.upper() for event in audit_events)
+required    = order.quantity × order.limitPrice
+
+# Phase 2 — Pattern Analysis
+# Phase 2 only runs for infrastructure failures — COMPLIANCE_REJECTED and INSUFFICIENT_FUNDS
+# are policy failures and are never systemic; skip Phase 2 for those.
+_SYSTEMIC_ELIGIBLE = {NETWORK_ERROR, ORDER_MATCHING_FAILED, LEDGER_DEBIT_FAILED, SETTLEMENT_FAILED}
+if failure_reason in _SYSTEMIC_ELIGIBLE:
+    recent = list_recent_failures(failure_reason=saga.failureReason, minutes=15)
+    systemic_risk = recent.count >= 3
+
+# Phase 3 — Context Enrichment (branch-specific)
+# COMPENSATING always takes highest precedence — money is in-flight regardless of systemic state.
 if saga.status == COMPENSATING:
-    → create_incident(order_id, reason="Saga compensation required — manual reconciliation needed", severity="CRITICAL")
+    → verdict=ESCALATE, priority=CRITICAL, confidence=0.95
+    → create_incident(severity=CRITICAL, reason="Saga compensation — financial reconciliation required")
+    → if systemic_risk: add to evidence[] but do not change verdict
 
-elif failure_reason in [TIMEOUT, NETWORK_ERROR]:
-    if retry_count < 3:
-        → recommend RETRY             # no tool call needed
+elif systemic_risk:
+    → create_incident(severity=HIGH, reason="Systemic: {N} orders failed with {reason} in 15 min")
+    → verdict=FLAG_SYSTEMIC, priority=HIGH, confidence=0.85
+
+elif failure_reason in [NETWORK_ERROR, ORDER_MATCHING_FAILED]:          # transient
+    health = get_service_health(service=<mapped from failure_reason>)
+    if health.status in [DEGRADED, DOWN]:
+        → verdict=FLAG_SYSTEMIC, priority=HIGH, confidence=0.90
+        → create_incident(severity=HIGH, reason="Service {name} is {status}")
+    elif retry_count < 3:
+        → verdict=RETRY, priority=LOW, confidence=0.90
     else:
-        → create_incident(order_id, reason="Retry limit reached", severity="HIGH")
+        → verdict=ESCALATE, priority=HIGH, confidence=0.90
+        → create_incident(severity=HIGH, reason="Retry limit reached after {N} attempts")
 
-elif failure_reason in [COMPLIANCE_REJECTED, ORDER_MATCHING_FAILED]:
-    → NO_ACTION                       # expected; not a system failure
+elif failure_reason == COMPLIANCE_REJECTED:
+    → verdict=NO_ACTION, priority=NONE, confidence=0.95
 
 elif failure_reason == INSUFFICIENT_FUNDS:
-    → get_ledger_account(user_id)     # check current balance
-    if availableCash >= required:
-        → recommend INVESTIGATE       # balance recovered; manual settlement retry
+    risk  = get_user_risk_profile(user_id)
+    ledger = get_ledger_account(user_id)
+    if risk.total_failed_30d >= 5:
+        → verdict=ESCALATE, priority=MEDIUM, confidence=0.80
+        → create_incident(severity=MEDIUM, reason="Chronic: user has {N} failures in 30 days")
+    elif ledger.availableCash >= required:
+        → verdict=INVESTIGATE, priority=LOW, confidence=0.80
     else:
-        → create_incident(order_id, reason="Account balance insufficient", severity="HIGH")
+        → verdict=NO_ACTION, priority=LOW, confidence=0.85
 
 else:
-    → INVESTIGATE                     # unrecognised failure code; manual review required
+    → verdict=INVESTIGATE, priority=MEDIUM, confidence=0.50
+
+# Phase 4 — Confidence guard
+if confidence < 0.6:
+    → downgrade verdict to INVESTIGATE
+
+# Phase 5 — Emit findings_json
+→ {verdict, confidence, priority, systemic_risk, evidence[], recommended_actions[]}
 ```
 
 ---
@@ -1368,30 +1429,47 @@ else:
 You are an EquiFlow order failure escalation agent. Today is {today}.
 
 You may be invoked in two ways:
-1. A specific order ID is provided — investigate that order immediately using get_order.
-2. A time window question is asked — use list_orders(status=FAILED) to find all failures first.
+1. A specific order ID is provided — start Phase 1 immediately with get_order.
+2. A time window question — call list_orders(status=FAILED) to find all failures first.
 
-In both cases, apply the same decision rules per order:
+For every FAILED order, run this 5-phase pipeline:
 
-DECISION RULES:
-- saga.status == COMPENSATING → always create_incident (financial reconciliation required)
-- failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count < 3 → recommend RETRY
-  (retry_count = number of RETRY events in query_audit_log — typically 0 since system does not auto-retry)
-- failure_reason in [TIMEOUT, NETWORK_ERROR] and retry_count >= 3 → create_incident (retries exhausted)
-- failure_reason in [COMPLIANCE_REJECTED, ORDER_MATCHING_FAILED] → NO_ACTION (expected rejection)
-- failure_reason == INSUFFICIENT_FUNDS → call get_ledger_account to check current balance
-    required = order.quantity * order.limitPrice (from get_order already called)
-    if availableCash >= required → recommend INVESTIGATE (balance recovered, manual retry)
-    if availableCash < required → create_incident (contact account holder)
-- any other failure_reason → INVESTIGATE (unrecognised; manual review required)
+PHASE 1 — TRIAGE
+  get_order(order_id)        → saga_id, user_id, quantity, limitPrice
+  get_saga(saga_id)          → failure_reason (enum code), saga.status, failed stepName
+  query_audit_log(order_id)  → always call; count RETRY events → retry_count
 
-Your final response must state for each order:
-- Root cause (exact failure_reason from the data)
-- Action taken (RETRY / INVESTIGATE / ESCALATE / NO_ACTION)
-- Why
+PHASE 2 — PATTERN ANALYSIS
+  Only for infrastructure failures [NETWORK_ERROR, ORDER_MATCHING_FAILED, LEDGER_DEBIT_FAILED, SETTLEMENT_FAILED].
+  Skip Phase 2 entirely for COMPLIANCE_REJECTED and INSUFFICIENT_FUNDS.
+  list_recent_failures(failure_reason=<code>, minutes=15)
+  If count >= 3: systemic_risk=true
 
-Do not speculate beyond what the tools return. If data is missing, say so.
+PHASE 3 — CONTEXT ENRICHMENT (branch-specific)
+  COMPENSATING saga (highest precedence — always ESCALATE CRITICAL regardless of systemic_risk):
+    → verdict=ESCALATE, priority=CRITICAL, confidence=0.95
+    → create_incident(severity=CRITICAL)
+    → if systemic_risk: note in evidence[] only
+  Transient [NETWORK_ERROR, ORDER_MATCHING_FAILED]:
+    get_service_health(service=<mapped service>)
+    DEGRADED/DOWN → FLAG_SYSTEMIC, create_incident(severity=HIGH)
+    retry_count < 3 → RETRY, priority=LOW
+    retry_count >= 3 → ESCALATE, create_incident(severity=HIGH)
+  COMPLIANCE_REJECTED:
+    → NO_ACTION, priority=NONE, confidence=0.95
+  INSUFFICIENT_FUNDS:
+    get_user_risk_profile(user_id)
+    get_ledger_account(user_id)
+    total_failed_30d >= 5 → ESCALATE, create_incident(severity=MEDIUM)
+    availableCash < required → NO_ACTION (one-time shortfall)
+    availableCash >= required → INVESTIGATE (balance recovered)
+  Unrecognised:
+    → INVESTIGATE, priority=MEDIUM, confidence=0.50
 
+PHASE 4 — CONFIDENCE GUARD
+  If confidence < 0.6: downgrade verdict to INVESTIGATE
+
+PHASE 5 — VERDICT
 End your reply with this block (valid JSON, tags unchanged):
 
 <findings_json>
@@ -1404,50 +1482,69 @@ End your reply with this block (valid JSON, tags unchanged):
       "order_id": "<UUID>",
       "user_id": "<userId>",
       "ticker": "<ticker>",
-      "failed_step": "<step_name>",
-      "failure_reason": "<exact string>",
-      "saga_status": "<FAILED|COMPENSATING|COMPENSATED>",
+      "failed_step": "<stepName or unknown>",
+      "failure_reason": "<exact enum code>",
+      "saga_status": "<FAILED|COMPENSATING>",
       "retry_count": <int>,
-      "action": "<RETRY|INVESTIGATE|ESCALATE|NO_ACTION>",
-      "incident_id": "<PD-XXXX or null>",
-      "explanation": "<one sentence>"
+      "systemic_risk": <true|false>,
+      "verdict": "<RETRY|NO_ACTION|INVESTIGATE|ESCALATE|FLAG_SYSTEMIC>",
+      "priority": "<CRITICAL|HIGH|MEDIUM|LOW|NONE>",
+      "confidence": <0.0–1.0>,
+      "evidence": ["<one sentence per signal>"],
+      "recommended_actions": ["<action taken, e.g. Incident PD-XXXX created>"],
+      "incident_id": "<PD-XXXX or null>"
     }}
   ],
-  "verdict": "<ALL_CLEAR|ESCALATE>"
+  "overall_verdict": "<ALL_CLEAR|ESCALATE|FLAG_SYSTEMIC>"
 }}
 </findings_json>
 
-ALL_CLEAR if all actions are RETRY, INVESTIGATE, or NO_ACTION. ESCALATE if any incident was created.
+Do not speculate beyond what the tools return. If a tool returns an error, note it in evidence[] and lower confidence.
 ```
 
 ---
 
 ### Files
 
-| File | Action |
-|------|--------|
-| `equiflow-mcp/escalation_agent.py` | **Create** — `SYSTEM_TEMPLATE` and `TOOLS` constants (imported by `api.py` for LIVE mode and `kafka_consumer.py` for CLI mode) |
-| `equiflow-mcp/playbooks/escalation.py` | **Create** — LOCAL mode rule-based planner; covers all decision branches using same `run(question, call_tool)` interface as other playbooks |
-| `equiflow-mcp/kafka_consumer.py` | **Create** — Kafka consumer; listens on `equiflow.saga.failed` and `equiflow.saga.compensated`; calls `escalation_agent.py` CLI with `order_id` |
-| `equiflow-mcp/equiflow_data_server.py` | **Modify** — add `handle_get_ledger_account` and `handle_create_incident` handlers; fix `/sagas/{id}` → `/saga/{id}` path bug on line 193 |
-| `equiflow-mcp/api.py` | **Modify** — add `escalation` to `AGENTS` dict with new `ESCALATION_DISPATCH`; add `escalation` to `PLAYBOOKS` dict |
-| `equiflow-mcp/requirements.txt` | **Modify** — add `kafka-python` |
-| `saga-orchestrator/.../OrderSaga.java` | **Modify** — standardize `failSaga()` calls to emit enum codes (`COMPLIANCE_REJECTED`, `ORDER_MATCHING_FAILED`, `INSUFFICIENT_FUNDS`, `LEDGER_DEBIT_FAILED`, `SETTLEMENT_FAILED`, `NETWORK_ERROR`, `TIMEOUT`) instead of free-form strings |
-| `frontend/src/components/AgentRunner.tsx` | **Modify** — set `ready: true` for escalation agent, add placeholder and example prompts |
+| File | Action | Status |
+|------|--------|--------|
+| `equiflow-mcp/escalation_agent.py` | **Create/Modify** — `SYSTEM_TEMPLATE` (5-phase instructions), `TOOLS` list, `DISPATCH` | ✅ Done |
+| `equiflow-mcp/playbooks/escalation.py` | **Create/Modify** — LOCAL mode rule-based planner; full 5-phase pipeline with comments | ✅ Done |
+| `equiflow-mcp/kafka_consumer.py` | **Create** — Kafka consumer; listens on `equiflow.saga.failed` and `equiflow.saga.compensated` | ✅ Done — untested |
+| `equiflow-mcp/equiflow_data_server.py` | **Modify** — all handlers including `handle_list_recent_failures`, `handle_get_service_health`, `handle_get_user_risk_profile` | ✅ Done |
+| `equiflow-mcp/api.py` | **Modify** — `ESCALATION_DISPATCH` wired with all 9 tools | ✅ Done |
+| `equiflow-mcp/requirements.txt` | **Modify** — add `kafka-python` | ✅ Done |
+| `saga-orchestrator/.../OrderSaga.java` | **Modify** — standardize `failSaga()` to emit enum codes | ✅ Done — rebuild pending |
+| `frontend/src/components/AgentRunner.tsx` | **Modify** — set `ready: true` for escalation agent | ✅ Done |
 
 ### Acceptance Criteria
 
-- [ ] Agent correctly identifies and creates incidents for COMPENSATING sagas
-- [ ] Agent recommends RETRY for transient errors (`retry_count < 3`), escalates when retries exhausted
-- [ ] `retry_count` is derived from `query_audit_log` — count of events with "RETRY" in event name; no stored field used
-- [ ] Agent makes NO_ACTION for `COMPLIANCE_REJECTED` / `ORDER_MATCHING_FAILED` — does not create unnecessary incidents
-- [ ] INSUFFICIENT_FUNDS branch calls `get_ledger_account`; `required = order.quantity × order.limitPrice` from already-fetched order
-- [ ] `Saga.failureReason` stores enum codes (`COMPLIANCE_REJECTED`, `INSUFFICIENT_FUNDS`, etc.) — `OrderSaga.failSaga()` updated
-- [ ] `equiflow_data_server.py` `/sagas/` → `/saga/` path bug fixed
-- [ ] `<findings_json>` block present and valid JSON in every response
-- [ ] Works in both Kafka-triggered (CLI arg) and on-demand (UI) modes
-- [ ] LIVE and LOCAL modes functional in UI; LOCAL uses rule-based planner (`playbooks/escalation.py`) covering all decision branches
-- [ ] **Depends on EQ-140** for LIVE mode — `get_order` returns 400 for BOT_OPERATOR tokens until EQ-140 is complete
+**Phase 1 (original — done):**
+- [x] Agent correctly identifies and creates incidents for COMPENSATING sagas
+- [x] Agent recommends RETRY for transient errors (`retry_count < 3`), escalates when retries exhausted
+- [x] `retry_count` derived from `query_audit_log` — count events with "RETRY" in name; no stored field used
+- [x] Agent makes NO_ACTION for `COMPLIANCE_REJECTED` — no unnecessary incidents created
+- [x] INSUFFICIENT_FUNDS branch calls `get_ledger_account`; `required = order.quantity × order.limitPrice`
+- [x] `Saga.failureReason` stores enum codes — `OrderSaga.failSaga()` updated
+- [x] `/sagas/` → `/saga/` path bug fixed
+- [x] `<findings_json>` block present and valid JSON in every response
+- [x] Works in both Kafka-triggered (CLI arg) and on-demand (UI) modes
+- [x] LIVE and LOCAL modes functional in UI
+
+**Phase 2 redesign (implemented — pending test sign-off):**
+- [x] `list_recent_failures` tool implemented — queries FAILED orders by `failure_reason` in last N minutes
+- [x] `get_service_health` tool implemented — returns `HEALTHY|DEGRADED|DOWN` for a named service
+- [x] `get_user_risk_profile` tool implemented — returns `total_failed_30d`, `risk_level` for a user
+- [x] Agent calls `list_recent_failures` after Phase 1 triage; routes to `FLAG_SYSTEMIC` if count ≥ 3
+- [x] Transient branch calls `get_service_health`; service down → `FLAG_SYSTEMIC` regardless of retry count
+- [x] INSUFFICIENT_FUNDS branch calls `get_user_risk_profile`; chronic user (≥ 5 failures/30d) → ESCALATE
+- [x] Every verdict includes `confidence` (0.0–1.0); confidence < 0.6 downgrades to INVESTIGATE
+- [x] `findings_json` includes `confidence`, `priority`, `systemic_risk`, `evidence[]`, `recommended_actions[]`
+- [x] Each phase clearly commented in `playbooks/escalation.py` with goal and key decision logic
+- [x] `saga.status == COMPENSATING` always produces ESCALATE CRITICAL regardless of systemic pattern — systemic context added to evidence[] but does not override verdict
+- [ ] LOCAL mode tested end-to-end against seed data — **pending user sign-off**
+- [ ] LIVE mode tested end-to-end against seed data (EQ-140 merged — unblocked) — **pending user sign-off**
+- [ ] `saga-orchestrator` rebuilt with enum codes and deployed
 
 ---
 
@@ -2216,11 +2313,11 @@ public OrderResponse getOrderInternal(UUID orderId) {
 | `order-service/.../OrderService.java` | Add `getOrderInternal(UUID orderId)` using `findById` |
 
 **Acceptance Criteria:**
-- [ ] `GET /orders/{id}` returns the order for a BOT_OPERATOR token regardless of who owns the order
-- [ ] `GET /orders/{id}` still enforces ownership for TRADER tokens (no regression)
-- [ ] Triage agent LIVE mode successfully fetches a FAILED order by UUID and proceeds to `get_saga` + `query_audit_log` steps
-- [ ] Escalation agent LIVE mode successfully fetches trader-owned FAILED orders (unblocks EQ-132 LIVE mode)
-- [ ] No changes to write endpoints (POST, DELETE, system-cancel)
+- [x] `GET /orders/{id}` returns the order for a BOT_OPERATOR token regardless of who owns the order
+- [x] `GET /orders/{id}` still enforces ownership for TRADER tokens (no regression)
+- [x] Triage agent LIVE mode successfully fetches a FAILED order by UUID and proceeds to `get_saga` + `query_audit_log` steps
+- [x] Escalation agent LIVE mode successfully fetches trader-owned FAILED orders (unblocks EQ-132 LIVE mode)
+- [x] No changes to write endpoints (POST, DELETE, system-cancel)
 
 > **Unblocks:** EQ-132 LIVE mode, EQ-135 end-to-end tests against real DB.
 

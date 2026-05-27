@@ -18,14 +18,21 @@ from equiflow_data_server import (
     handle_get_order,
     handle_get_saga,
     handle_query_audit_log,
+    handle_get_ledger_account,
+    handle_create_incident,
+    handle_list_recent_failures,
+    handle_get_service_health,
+    handle_get_user_risk_profile,
 )
 from mcp.types import TextContent
-from duplicate_agent import SYSTEM_TEMPLATE as DUPLICATE_SYSTEM, TOOLS as DUPLICATE_TOOLS
-from compliance_agent import SYSTEM_TEMPLATE as COMPLIANCE_SYSTEM, TOOLS as COMPLIANCE_TOOLS
-from agent import SYSTEM_TEMPLATE as TRIAGE_SYSTEM, TOOLS as TRIAGE_TOOLS
-import playbooks.duplicate  as _pb_duplicate
-import playbooks.compliance as _pb_compliance
-import playbooks.triage     as _pb_triage
+from duplicate_agent   import SYSTEM_TEMPLATE as DUPLICATE_SYSTEM,   TOOLS as DUPLICATE_TOOLS
+from compliance_agent  import SYSTEM_TEMPLATE as COMPLIANCE_SYSTEM,  TOOLS as COMPLIANCE_TOOLS
+from agent             import SYSTEM_TEMPLATE as TRIAGE_SYSTEM,      TOOLS as TRIAGE_TOOLS
+from escalation_agent  import SYSTEM_TEMPLATE as ESCALATION_SYSTEM,  TOOLS as ESCALATION_TOOLS
+import playbooks.duplicate   as _pb_duplicate
+import playbooks.compliance  as _pb_compliance
+import playbooks.triage      as _pb_triage
+import playbooks.escalation  as _pb_escalation
 
 app = FastAPI(title="EquiFlow Agent API")
 
@@ -72,10 +79,22 @@ COMPLIANCE_DISPATCH = {
     "get_compliance_result": handle_get_compliance_result,
 }
 TRIAGE_DISPATCH = {
-    "get_order": handle_get_order,
-    "get_saga": handle_get_saga,
-    "list_orders": handle_list_orders,
+    "get_order":       handle_get_order,
+    "get_saga":        handle_get_saga,
+    "list_orders":     handle_list_orders,
     "query_audit_log": handle_query_audit_log,
+}
+
+ESCALATION_DISPATCH = {
+    "list_orders":           handle_list_orders,
+    "get_order":             handle_get_order,
+    "get_saga":              handle_get_saga,
+    "query_audit_log":       handle_query_audit_log,
+    "get_ledger_account":    handle_get_ledger_account,
+    "create_incident":       handle_create_incident,
+    "list_recent_failures":  handle_list_recent_failures,
+    "get_service_health":    handle_get_service_health,
+    "get_user_risk_profile": handle_get_user_risk_profile,
 }
 
 AGENTS = {
@@ -94,12 +113,18 @@ AGENTS = {
         "tools":    TRIAGE_TOOLS,
         "dispatch": TRIAGE_DISPATCH,
     },
+    "escalation": {
+        "system":   ESCALATION_SYSTEM,
+        "tools":    ESCALATION_TOOLS,
+        "dispatch": ESCALATION_DISPATCH,
+    },
 }
 
 PLAYBOOKS = {
-    "duplicate":  _pb_duplicate,
-    "compliance": _pb_compliance,
-    "triage":     _pb_triage,
+    "duplicate":   _pb_duplicate,
+    "compliance":  _pb_compliance,
+    "triage":      _pb_triage,
+    "escalation":  _pb_escalation,
 }
 
 SCRIPT_DIR = Path(__file__).parent
@@ -108,7 +133,7 @@ SCRIPT_DIR = Path(__file__).parent
 class RunRequest(BaseModel):
     agent: str
     question: str
-    mode: str = "live"  # "live" | "local"
+    mode: str = "local"  # "live" | "local"
 
 
 SEED_LEVELS = {
@@ -218,6 +243,14 @@ async def seed_agent_endpoint(req: SeedRequest):
             "--duration", str(duration_ms),
             "--duplicate-delay", gap,
         ]
+    elif req.agent == "escalation":
+        cmd = [sys.executable, "-u", str(SCRIPT_DIR / "seed_failed_orders.py")]
+        if req.level == "systemic":
+            cmd.append("--systemic")
+        elif req.level == "clean":
+            cmd.append("--clean")
+        elif req.level == "clean-systemic":
+            cmd += ["--systemic", "--clean"]
     else:
         async def no_seed_gen():
             yield {"data": json.dumps({"type": "error", "message": f"No seed script for agent: {req.agent}"})}
@@ -245,3 +278,40 @@ async def seed_agent_endpoint(req: SeedRequest):
 @app.get("/api/agents")
 async def list_agents():
     return {"agents": list(AGENTS.keys())}
+
+
+@app.get("/api/test-data")
+async def get_test_data():
+    import asyncio as _asyncio
+
+    statuses = [
+        ("FAILED",    "escalation"),
+        ("REJECTED",  "compliance"),
+        ("PENDING",   "triage"),
+        ("OPEN",      "triage"),
+        ("FILLED",    "triage"),
+        ("CANCELLED", "triage"),
+    ]
+
+    results = await _asyncio.gather(
+        *[handle_list_orders({"status": s, "size": 10}) for s, _ in statuses]
+    )
+
+    grouped: dict = {"escalation": [], "compliance": [], "triage": []}
+
+    for (_, group), res in zip(statuses, results):
+        if not res:
+            continue
+        try:
+            data = json.loads(res[0].text)
+            for o in data.get("content", []):
+                grouped[group].append({
+                    "id":     o["id"],
+                    "ticker": o.get("ticker", "?"),
+                    "status": o.get("status", "?"),
+                    "side":   o.get("side", ""),
+                })
+        except Exception:
+            pass
+
+    return grouped

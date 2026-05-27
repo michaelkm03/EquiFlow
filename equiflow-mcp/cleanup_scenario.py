@@ -1,8 +1,6 @@
 """
-Cleanup script for EQ-136 duplicate order scenario.
-
-Deletes ALL orders and related data not part of the Flyway seed
-(i.e. any order whose UUID does not start with b1000000-).
+Cleanup script — wipes ALL orders and related data across every service,
+leaving the database in a clean state ready for the next scenario run.
 
 Usage:
     python equiflow-mcp/cleanup_scenario.py           # dry run — shows what would be deleted
@@ -15,9 +13,6 @@ import sys
 
 POSTGRES_CONTAINER = "equiflow-postgres"
 POSTGRES_USER      = "equiflow"
-
-# Flyway-seeded order IDs start with this prefix — never delete these
-SEED_PREFIX = "b1000000"
 
 
 def psql(db: str, sql: str) -> str:
@@ -51,17 +46,15 @@ def main():
     else:
         print("\n  EXECUTING CLEANUP\n")
 
-    order_filter = f"id::text NOT LIKE '{SEED_PREFIX}%'"
-
     # ── 1. Collect order IDs to delete ──────────────────────────────────────
     order_ids_raw = psql(
         "equiflow_orders",
-        f"SELECT id FROM orders WHERE {order_filter};"
+        "SELECT id FROM orders;"
     )
     order_ids = [oid.strip() for oid in order_ids_raw.splitlines() if oid.strip()]
     n_orders = len(order_ids)
 
-    print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_orders} orders (all non-seed)")
+    print(f"  {'[DRY RUN] Would delete' if dry else 'Deleting'}: {n_orders} orders")
 
     if n_orders == 0:
         print("\n  Nothing to clean up — already fresh.\n")

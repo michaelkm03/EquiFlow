@@ -59,7 +59,7 @@ const AGENTS: AgentConfig[] = [
       'Escalate any failed orders from the last hour',
       'Investigate failed orders today',
     ],
-    ready: false,
+    ready: true,
   },
   {
     id: 'settlement',
@@ -72,13 +72,6 @@ const AGENTS: AgentConfig[] = [
   },
 ]
 
-const SEED_PRESETS = [
-  { label: 'HIGH' as const, desc: '~0.2s gap',  color: 'bg-[#7b2d26] border-[#7b2d26] hover:bg-[#5e2219] hover:border-[#5e2219]' },
-  { label: 'MED'  as const, desc: '~2s gap',    color: 'bg-[#c47d0e] border-[#c47d0e] hover:bg-[#9e6409] hover:border-[#9e6409]' },
-  { label: 'LOW'  as const, desc: '~7s gap',    color: 'bg-[#19535f] border-[#19535f] hover:bg-[#0f3840] hover:border-[#0f3840]' },
-]
-
-type SeedLevel = typeof SEED_PRESETS[number]['label']
 type RunStatus = 'idle' | 'running' | 'done' | 'error'
 type SeedStatus = 'idle' | 'running' | 'done' | 'error'
 
@@ -89,7 +82,7 @@ export function AgentRunner() {
   const [question, setQuestion] = useState('')
   const [events, setEvents] = useState<AgentEvent[]>([])
   const [status, setStatus] = useState<RunStatus>('idle')
-  const [mode, setMode] = useState<RunMode>('live')
+  const [mode, setMode] = useState<RunMode>('local')
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<(() => void) | null>(null)
 
@@ -174,17 +167,6 @@ export function AgentRunner() {
     setSeedLog([])
     setSeedStatus('running')
     const res = await fetch('/api/cleanup', { method: 'POST' })
-    await streamSeedResponse(res)
-  }
-
-  async function seed(level: SeedLevel) {
-    setSeedLog([])
-    setSeedStatus('running')
-    const res = await fetch('/api/seed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agent: 'duplicate', level }),
-    })
     await streamSeedResponse(res)
   }
 
@@ -281,27 +263,6 @@ export function AgentRunner() {
                 <p className="text-[11px] mt-1 leading-relaxed text-zinc-400 line-clamp-2">{agent.description}</p>
               </button>
 
-              {/* Seed controls — Duplicate Detection only */}
-              {agent.id === 'duplicate' && (
-                <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
-                  <div className="border-t border-zinc-100 pt-2.5 flex flex-col gap-1.5">
-                    <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wide">Seed</p>
-                    <div className="flex gap-1.5">
-                      {SEED_PRESETS.map(preset => (
-                        <button
-                          key={preset.label}
-                          onClick={() => seed(preset.label)}
-                          disabled={seedStatus === 'running' || status === 'running'}
-                          title={preset.desc}
-                          className={`flex-1 rounded-sm border text-white disabled:opacity-30 disabled:cursor-not-allowed py-1.5 text-[11px] font-mono font-semibold tracking-wide transition-all ${preset.color}`}
-                        >
-                          {seedStatus === 'running' ? '…' : preset.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           ))}
         </div>
