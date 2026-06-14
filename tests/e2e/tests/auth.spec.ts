@@ -1,3 +1,14 @@
+/**
+ * Auth Service — Smoke Tests (@smoke)
+ *
+ * Validates that the authentication service correctly issues and validates
+ * JWT tokens. These are the most foundational tests in the suite — every
+ * other service depends on auth working correctly. If any test here fails,
+ * all downstream tests (integration, E2E) are meaningless.
+ *
+ * Runs on: every PR (required gate), every push to master
+ * Services required: auth-service (localhost:8081)
+ */
 import { test, expect, APIRequestContext } from '@playwright/test';
 
 const AUTH_URL = process.env.AUTH_URL || 'http://localhost:8081';
@@ -17,6 +28,9 @@ test.describe('Auth Service', { tag: '@smoke' }, () => {
   });
 
   test('valid login returns a JWT token', async () => {
+    // Core happy path: a known trader credential must produce a valid JWT.
+    // Validates token shape (non-empty string, >50 chars), role assignment,
+    // and expiry field — all required by downstream services for authorization.
     const response = await request.post('/auth/token', {
       data: {
         username: 'trader1',
@@ -36,6 +50,8 @@ test.describe('Auth Service', { tag: '@smoke' }, () => {
   });
 
   test('invalid password returns 401', async () => {
+    // Security boundary: wrong password must never produce a token.
+    // A 200 here would mean the auth service has a critical security defect.
     const response = await request.post('/auth/token', {
       data: {
         username: 'trader1',
@@ -49,6 +65,8 @@ test.describe('Auth Service', { tag: '@smoke' }, () => {
   });
 
   test('missing fields returns 400', async () => {
+    // Input validation: empty credentials must be rejected at the API boundary
+    // before reaching any authentication logic.
     const response = await request.post('/auth/token', {
       data: {
         username: '',
@@ -60,6 +78,8 @@ test.describe('Auth Service', { tag: '@smoke' }, () => {
   });
 
   test('unknown user returns 401', async () => {
+    // Ensures the service does not leak user existence via a different status
+    // code. Unknown user and wrong password should both return 401, not 404.
     const response = await request.post('/auth/token', {
       data: {
         username: 'nonexistent_user',
@@ -71,13 +91,14 @@ test.describe('Auth Service', { tag: '@smoke' }, () => {
   });
 
   test('validate endpoint accepts valid JWT', async () => {
-    // First, get a token
+    // Two-step flow: login then validate. Confirms the token issued in step 1
+    // is immediately usable by other services that call /auth/validate
+    // to verify incoming requests.
     const loginResp = await request.post('/auth/token', {
       data: { username: 'trader1', password: 'password123' },
     });
     const { token } = await loginResp.json();
 
-    // Then validate it
     const validateResp = await request.get('/auth/validate', {
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -87,6 +108,9 @@ test.describe('Auth Service', { tag: '@smoke' }, () => {
   });
 
   test('validate endpoint rejects invalid JWT', async () => {
+    // Ensures the validation endpoint does not blindly return true.
+    // Any service using /auth/validate as a trust signal depends on this
+    // correctly returning 401 for a tampered or fabricated token.
     const response = await request.get('/auth/validate', {
       headers: { Authorization: 'Bearer invalid.jwt.token' },
     });
