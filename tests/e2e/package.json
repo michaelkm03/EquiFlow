@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "description": "Playwright E2E tests for EquiFlow trading engine",
   "scripts": {
-    "test": "playwright test",
+    "test": "playwright test --project=regression",
+    "test:ui": "playwright test --project=ui",
+    "test:smoke": "playwright test --project=smoke",
+    "test:integration": "playwright test --project=integration",
+    "test:e2e": "playwright test --project=e2e",
     "test:headed": "playwright test --headed",
     "test:auth": "playwright test tests/auth.spec.ts",
     "test:orders": "playwright test tests/orders.spec.ts",
@@ -11,7 +15,9 @@
     "test:market": "playwright test tests/market-data.spec.ts",
     "test:ledger": "playwright test tests/ledger.spec.ts",
     "test:audit": "playwright test tests/audit.spec.ts",
-    "report": "playwright show-report"
+    "test:order-flow": "playwright test tests/order-flow.spec.ts",
+    "report": "playwright show-report",
+    "report:open": "playwright show-report --host 0.0.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0",
