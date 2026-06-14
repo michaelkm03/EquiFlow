@@ -33,9 +33,9 @@ test.describe('Agent Dashboard — UI', { tag: '@ui' }, () => {
     // appear in the list. Non-ready agents (Failure Escalation, Settlement
     // Reconciliation) must not appear — they are hidden until implemented.
     await expect(page.getByText('EquiFlow')).toBeVisible();
-    await expect(page.getByText('Duplicate Detection')).toBeVisible();
-    await expect(page.getByText('Compliance Monitor')).toBeVisible();
-    await expect(page.getByText('Order Triage')).toBeVisible();
+    await expect(page.getByText('Duplicate Detection').first()).toBeVisible();
+    await expect(page.getByText('Compliance Monitor').first()).toBeVisible();
+    await expect(page.getByText('Order Triage').first()).toBeVisible();
 
     // Not-ready agents must not be rendered
     await expect(page.getByText('Failure Escalation')).not.toBeVisible();
@@ -64,7 +64,7 @@ test.describe('Agent Dashboard — UI', { tag: '@ui' }, () => {
     // A stale header after selection would mean the state update is broken.
     await page.getByText('Compliance Monitor').click();
     await expect(page.getByRole('heading', { name: 'Compliance Monitor' })).toBeVisible();
-    await expect(page.getByText('wash-sale')).toBeVisible();
+    await expect(page.getByText('wash-sale').first()).toBeVisible();
   });
 
   test('clicking Order Triage updates the main panel and shows relevant examples', async ({ page }) => {
@@ -150,9 +150,9 @@ test.describe('Agent Dashboard — UI', { tag: '@ui' }, () => {
     // Seed controls (HIGH/MED/LOW buttons) allow QA to generate test data
     // with specific duplicate time gaps. They must be visible only when
     // Duplicate Detection is selected — they don't apply to other agents.
-    await expect(page.getByRole('button', { name: 'HIGH' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'MED' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'LOW' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'HIGH', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'MED', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'LOW', exact: true })).toBeVisible();
   });
 
   test('seed controls are hidden when switching to Compliance Monitor', async ({ page }) => {
@@ -161,9 +161,9 @@ test.describe('Agent Dashboard — UI', { tag: '@ui' }, () => {
     // appear when it is selected — they would confuse users and could trigger
     // unintended data seeding in shared environments.
     await page.getByText('Compliance Monitor').click();
-    await expect(page.getByRole('button', { name: 'HIGH' })).not.toBeVisible();
-    await expect(page.getByRole('button', { name: 'MED' })).not.toBeVisible();
-    await expect(page.getByRole('button', { name: 'LOW' })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'HIGH', exact: true })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'MED', exact: true })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'LOW', exact: true })).not.toBeVisible();
   });
 
   test('Cleanup button is present in sidebar footer', async ({ page }) => {

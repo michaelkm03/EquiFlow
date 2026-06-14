@@ -281,8 +281,8 @@ export function AgentRunner() {
                 <p className="text-[11px] mt-1 leading-relaxed text-zinc-400 line-clamp-2">{agent.description}</p>
               </button>
 
-              {/* Seed controls — Duplicate Detection only */}
-              {agent.id === 'duplicate' && (
+              {/* Seed controls — Duplicate Detection only, and only when it's selected */}
+              {agent.id === 'duplicate' && selectedId === 'duplicate' && (
                 <div className="px-3 pb-3" onClick={e => e.stopPropagation()}>
                   <div className="border-t border-zinc-100 pt-2.5 flex flex-col gap-1.5">
                     <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wide">Seed</p>

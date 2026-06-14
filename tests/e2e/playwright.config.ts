@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
 
 /**
  * Service URL defaults — all overridable via environment variables.
@@ -15,6 +16,14 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
+
+  webServer: {
+    command: 'npm run dev',
+    cwd: path.resolve(__dirname, '../../frontend'),
+    url: 'http://localhost:5173',
+    reuseExistingServer: true,
+    timeout: 30_000,
+  },
 
   // E2E tests are sequentially ordered — shared service state means parallel
   // runs can create order/ledger conflicts. Enable per-file parallelism once
@@ -39,6 +48,7 @@ export default defineConfig({
   ],
 
   use: {
+    headless: true,
     baseURL: process.env.BASE_URL || 'http://localhost:8080',
     extraHTTPHeaders: {
       'Content-Type': 'application/json',
