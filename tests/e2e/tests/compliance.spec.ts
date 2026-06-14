@@ -4,7 +4,7 @@ const COMPLIANCE_URL = process.env.COMPLIANCE_URL || 'http://localhost:8084';
 
 let apiRequest: APIRequestContext;
 
-test.describe('Compliance Service', () => {
+test.describe('Compliance Service', { tag: '@integration' }, () => {
   test.beforeAll(async ({ playwright }) => {
     apiRequest = await playwright.request.newContext({
       baseURL: COMPLIANCE_URL,

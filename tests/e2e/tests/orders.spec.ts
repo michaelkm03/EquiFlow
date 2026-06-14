@@ -6,7 +6,7 @@ const GATEWAY_URL = process.env.BASE_URL || 'http://localhost:8080';
 let authToken: string;
 let apiRequest: APIRequestContext;
 
-test.describe('Order Service', () => {
+test.describe('Order Service', { tag: '@integration' }, () => {
   test.beforeAll(async ({ playwright }) => {
     // Get auth token
     const authContext = await playwright.request.newContext({

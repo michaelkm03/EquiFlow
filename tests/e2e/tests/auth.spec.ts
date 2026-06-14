@@ -2,7 +2,7 @@ import { test, expect, APIRequestContext } from '@playwright/test';
 
 const AUTH_URL = process.env.AUTH_URL || 'http://localhost:8081';
 
-test.describe('Auth Service', () => {
+test.describe('Auth Service', { tag: '@smoke' }, () => {
   let request: APIRequestContext;
 
   test.beforeAll(async ({ playwright }) => {

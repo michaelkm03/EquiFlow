@@ -7,7 +7,7 @@ const TRADER1_USER_ID = 'a1000000-0000-0000-0000-000000000001';
 
 let apiRequest: APIRequestContext;
 
-test.describe('Ledger Service', () => {
+test.describe('Ledger Service', { tag: '@integration' }, () => {
   test.beforeAll(async ({ playwright }) => {
     apiRequest = await playwright.request.newContext({
       baseURL: LEDGER_URL,

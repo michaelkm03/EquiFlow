@@ -4,7 +4,7 @@ const MARKET_URL = process.env.MARKET_URL || 'http://localhost:8083';
 
 let apiRequest: APIRequestContext;
 
-test.describe('Market Data Service', () => {
+test.describe('Market Data Service', { tag: '@smoke' }, () => {
   test.beforeAll(async ({ playwright }) => {
     apiRequest = await playwright.request.newContext({
       baseURL: MARKET_URL,
