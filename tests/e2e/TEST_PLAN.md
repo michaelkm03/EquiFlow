@@ -11,15 +11,17 @@ confidence on merge.
 
 ## Test Taxonomy
 
-| Tag | Scope | Speed | Services Required |
-|-----|-------|-------|-------------------|
-| `@smoke` | Individual service health | < 60s | Auth + Market Data only |
-| `@integration` | Per-service API contract | 2–4 min | All services |
-| `@e2e` | Full cross-service saga | 3–5 min | All services |
-| _(none)_ | Full regression | 8–12 min | All services |
+| Tag | Scope | Speed | Services Required | Browser |
+|-----|-------|-------|-------------------|---------|
+| `@ui` | React dashboard — render, state, interactions | < 90s | Frontend only (localhost:5173) | Yes (Chromium) |
+| `@smoke` | Individual service health | < 60s | Auth + Market Data only | No |
+| `@integration` | Per-service API contract | 2–4 min | All services | No |
+| `@e2e` | Full cross-service saga | 3–5 min | All services | No |
+| _(none)_ | Full regression | 10–15 min | All services + frontend | Yes + No |
 
 Run a specific suite:
 ```bash
+npx playwright test --project=ui            # browser tests, frontend only
 npx playwright test --project=smoke
 npx playwright test --project=integration
 npx playwright test --project=e2e
@@ -59,17 +61,39 @@ any test environment spins up and wastes runner time.
 
 ---
 
-## Stage 3 — Smoke Tests (PR Required Gate)
+## Stage 3 — UI Tests + Smoke Tests (PR Required Gate)
 
 **Trigger:** Every PR + every push to master  
-**Time:** < 2 min test execution (~30s service startup overhead)  
+**Time:** < 3 min total (UI ~90s, smoke ~60s, run in parallel)  
 **Depends on:** Stage 2  
-**Tag:** `@smoke`  
+**Tags:** `@ui` + `@smoke`  
 **Blocks PR merge:** Yes (required check)
 
-If smoke fails, no deeper testing runs. Fast feedback for developers.
+UI tests run against the frontend only — no Java services needed.
+Smoke tests validate auth and market-data health.
+Both are required gates; if either fails, no deeper testing runs.
 
 ### Test Coverage
+
+#### `tests/ui.spec.ts` — React Dashboard UI (14 tests)
+
+| Test | What It Validates |
+|------|-------------------|
+| `page loads and renders the sidebar with ready agents` | Initial render: 3 ready agents visible, 2 not-ready agents hidden |
+| `first ready agent is selected by default` | Default state: Duplicate Detection is active on load |
+| `ticket reference is displayed in the header` | Traceability: EQ-136 ticket number visible in header |
+| `clicking Compliance Monitor updates the main panel header` | Agent selection: header and description update on sidebar click |
+| `clicking Order Triage updates the main panel and shows relevant examples` | Agent selection: example prompts update to match selected agent |
+| `clicking an example prompt populates the input field` | Example shortcuts pre-fill the input correctly |
+| `RUN button is disabled when prompt input is empty` | Guards against empty prompt submission |
+| `RUN button enables after typing a prompt` | Controlled input: non-empty text enables submission |
+| `RUN button re-disables if input is cleared` | Inverse state: clearing input disables RUN again |
+| `LIVE and LOCAL mode buttons are present` | Mode toggle renders with correct labels |
+| `clicking LOCAL toggles active mode` | Toggle state change: LOCAL becomes visually active after click |
+| `seed controls are visible for Duplicate Detection agent` | HIGH/MED/LOW seed buttons present for correct agent |
+| `seed controls are hidden when switching to Compliance Monitor` | Seed buttons are agent-specific, not global |
+| `Cleanup button is present in sidebar footer` | Cleanup accessible regardless of agent selection |
+| `timeline area shows idle placeholder before any run` | Empty state is communicated clearly before first run |
 
 #### `tests/auth.spec.ts` — Auth Service (6 tests)
 

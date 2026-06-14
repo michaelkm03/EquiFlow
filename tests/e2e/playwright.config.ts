@@ -50,6 +50,22 @@ export default defineConfig({
 
   projects: [
     /**
+     * UI — @ui
+     * Browser-level tests against the React frontend (localhost:5173).
+     * Does not require Java backend services. Validates render, state
+     * transitions, and interactive element behavior. Runs on every PR
+     * alongside smoke tests.
+     */
+    {
+      name: 'ui',
+      grep: /@ui/,
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
+      },
+    },
+
+    /**
      * SMOKE — @smoke
      * Runs on every PR as a required gate. Fast (<60s). Tests auth and
      * market-data health only. No order submission, no cross-service flows.
