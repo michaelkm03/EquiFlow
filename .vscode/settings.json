@@ -1,4 +1,6 @@
 {
+    "playwright.reuseBrowser": false,
+    "playwright.testsRootDir": "tests/e2e",
     "java.configuration.updateBuildConfiguration": "interactive",
     "java.jdt.ls.java.home": "C:\\Program Files\\Microsoft\\jdk-17.0.18.8-hotspot",
     "java.configuration.runtimes": [
