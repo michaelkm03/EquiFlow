@@ -1,0 +1,8 @@
+
+The following files have been resolved:
+   org.springframework.cloud:spring-cloud-starter-gateway:jar:4.1.2:compile[36m -- module spring.cloud.starter.gateway[0;1;33m (auto)[m
+   org.springdoc:springdoc-openapi-starter-webflux-ui:jar:2.3.0:compile[36m -- module org.springdoc.openapi.webflux.ui[0;1m [auto][m
+   org.springframework.boot:spring-boot-starter-actuator:jar:3.2.5:compile[36m -- module spring.boot.starter.actuator[0;1m [auto][m
+   org.springframework.boot:spring-boot-starter-security:jar:3.2.5:compile[36m -- module spring.boot.starter.security[0;1m [auto][m
+   org.projectlombok:lombok:jar:1.18.38:provided[36m -- module lombok[m
+
