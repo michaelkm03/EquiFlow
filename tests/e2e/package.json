@@ -5,6 +5,7 @@
   "scripts": {
     "test": "playwright test --project=regression",
     "test:ui": "playwright test --project=ui",
+    "test:ui:debug": "playwright test --project=ui --debug",
     "test:smoke": "playwright test --project=smoke",
     "test:integration": "playwright test --project=integration",
     "test:e2e": "playwright test --project=e2e",

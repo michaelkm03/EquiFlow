@@ -180,4 +180,50 @@ test.describe('Agent Dashboard — UI', { tag: '@ui' }, () => {
     // and waiting for input — a blank panel with no feedback is confusing.
     await expect(page.getByText('Run an agent to see output')).toBeVisible();
   });
+
+  // ─── Negative Cases ───────────────────────────────────────────────────────────
+
+  test('seed controls are not shown for Order Triage agent', async ({ page }) => {
+    // Seed controls are Duplicate Detection-specific. Order Triage has no
+    // concept of seeding duplicate orders — showing them would mislead users
+    // into thinking they can seed data for a different agent's workflow.
+    await page.getByText('Order Triage').click();
+    await expect(page.getByRole('button', { name: 'HIGH', exact: true })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'MED', exact: true })).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'LOW', exact: true })).not.toBeVisible();
+  });
+
+  test('switching agents does not carry over example prompts from previous agent', async ({ page }) => {
+    // When switching to Compliance Monitor, the Duplicate Detection example
+    // prompt buttons must no longer be visible. Stale examples from the wrong
+    // agent would seed the input with an irrelevant prompt and confuse users.
+    await page.getByText('Compliance Monitor').click();
+    await expect(page.getByRole('button', { name: "Scan today's orders for duplicates" })).not.toBeVisible();
+  });
+
+  test('LIVE button does not show active state when LOCAL is selected', async ({ page }) => {
+    // Validates the inverse of the LOCAL toggle test: when LOCAL is active,
+    // LIVE must not also appear active. Two simultaneously active mode buttons
+    // would mean the toggle state is broken.
+    const liveBtn = page.getByRole('button', { name: 'LIVE' });
+    await page.getByRole('button', { name: 'LOCAL' }).click();
+    await expect(liveBtn).not.toHaveClass(/bg-\[#19535f\]/);
+  });
+
+  test('prompt input is empty on initial page load', async ({ page }) => {
+    // The input must start blank — no pre-filled value from a previous session,
+    // cached state, or default injection. A pre-filled input would silently
+    // submit a stale prompt if the user clicks RUN without reading it.
+    const input = page.getByPlaceholder("Scan today's orders for duplicates");
+    await expect(input).toHaveValue('');
+  });
+
+  test('RUN button remains disabled when input contains only whitespace', async ({ page }) => {
+    // A prompt of only spaces is functionally empty — the agent would receive
+    // a blank query. The RUN button must stay disabled to prevent this, the
+    // same as if the field were completely empty.
+    const input = page.getByPlaceholder("Scan today's orders for duplicates");
+    await input.fill('   ');
+    await expect(page.getByRole('button', { name: 'RUN' })).toBeDisabled();
+  });
 });

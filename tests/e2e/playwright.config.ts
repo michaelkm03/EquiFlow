@@ -48,7 +48,7 @@ export default defineConfig({
   ],
 
   use: {
-    headless: true,
+    headless: false,
     baseURL: process.env.BASE_URL || 'http://localhost:8080',
     extraHTTPHeaders: {
       'Content-Type': 'application/json',
@@ -71,6 +71,7 @@ export default defineConfig({
       grep: /@ui/,
       use: {
         ...devices['Desktop Chrome'],
+        headless: false,
         baseURL: process.env.FRONTEND_URL || 'http://localhost:5173',
       },
     },
