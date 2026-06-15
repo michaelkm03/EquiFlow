@@ -35,7 +35,7 @@
 
 ## 1. Executive Summary
 
-**EquiFlow** is a high-integrity US equity trading engine built on Java 21 and Spring Boot 3.x microservices. It is a **local development and test-writing project** — it will never be deployed to a cloud environment.
+**EquiFlow** is a high-integrity US equity trading engine built on Java 25 and Spring Boot 3.x microservices. It is a **local development and test-writing project** — it will never be deployed to a cloud environment.
 
 The system simulates a production-grade brokerage backend with:
 
@@ -1155,7 +1155,7 @@ test('trader submits market order and receives fill', async ({ request }) => {
 
 ### Prerequisites
 - Docker Desktop
-- Java 21 (JDK)
+- Java 25 (JDK)
 - Maven 3.9+
 - Node.js 20+ (for Playwright)
 - Allure CLI (`npm install -g allure-commandline`)

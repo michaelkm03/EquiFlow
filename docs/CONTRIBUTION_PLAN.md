@@ -37,7 +37,7 @@
 | Status | Ticket | Task | Points | Priority |
 |--------|--------|------|--------|----------|
 | ✅ | <nobr>[EQ-110](#eq-110--ci-pipeline-github-actions)</nobr> | CI Pipeline — GitHub Actions build and test on every push | 2 | P0 |
-| ✅ | <nobr>[EQ-111](#eq-111--fix-java-version-mismatch)</nobr> | Fix Java Version Mismatch — align pom.xml and README to Java 21 | 1 | P0 |
+| ✅ | <nobr>[EQ-111](#eq-111--fix-java-version-mismatch)</nobr> | Fix Java Version Mismatch — align pom.xml and README to Java 25 | 1 | P0 |
 | ✅ | <nobr>[EQ-112](#eq-112--ledgerservice-test-coverage)</nobr> | LedgerService Test Coverage — hold, debit, release, concurrency paths | 5 | P0 |
 | ✅ | <nobr>[EQ-113a](#eq-113a--compensating-status-checkpoint)</nobr> | Compensating Status Checkpoint — write COMPENSATING to DB in failSaga() before any Feign call | 2 | P0 |
 | ⚪ | <nobr>[EQ-113b](#eq-113b--target-service-idempotency)</nobr> | Target Service Idempotency — system-cancel endpoint on order-service; release() idempotency on ledger-service | 2 | P0 — can start parallel with EQ-113a |
@@ -342,7 +342,7 @@ delivery channel (email, push) is out of scope for this story.
 
 **Acceptance Criteria:**
 - [ ] Workflow triggers on `push` and `pull_request` to `master`
-- [ ] Pipeline runs `mvn --batch-mode test` across all modules on Java 21
+- [ ] Pipeline runs `mvn --batch-mode test` across all modules on Java 25
 - [ ] A failing test causes the pipeline to report failure
 - [ ] README displays CI status badge
 
@@ -358,8 +358,8 @@ delivery channel (email, push) is out of scope for this story.
 **Services Affected:** All modules (build configuration only)
 
 **Acceptance Criteria:**
-- [ ] `pom.xml` declares Java 21; README updated to match
-- [ ] Build and all tests pass under Java 21 in CI
+- [ ] `pom.xml` declares Java 25; README updated to match
+- [ ] Build and all tests pass under Java 25 in CI
 
 ---
 

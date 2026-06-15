@@ -1,7 +1,7 @@
 # EquiFlow — Project Context
 
 ## Stack
-- **Backend**: Java 21, Spring Boot 3.x — 9 services + 3 infra containers
+- **Backend**: Java 25, Spring Boot 3.x — 9 services + 3 infra containers
 - **Frontend**: React + TypeScript + Vite (`frontend/`) — port 5173
 - **Tests**: Playwright TypeScript (`tests/e2e/`) — 5 named projects
 - **Infra**: Docker Compose (all services), Flyway (auto-migrations on boot), Kafka, PostgreSQL, Redis

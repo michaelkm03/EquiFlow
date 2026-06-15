@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/michaelkm03/EquiFlow/actions/workflows/ci.yml/badge.svg)](https://github.com/michaelkm03/EquiFlow/actions/workflows/ci.yml)
 
-A high-integrity US equity trading engine built with Java 21 and Spring Boot 3.x microservices. Simulates a production-grade brokerage backend with real order book matching, SEC/FINRA compliance enforcement, Saga-orchestrated distributed transactions, and chaos engineering support.
+A high-integrity US equity trading engine built with Java 25 and Spring Boot 3.x microservices. Simulates a production-grade brokerage backend with real order book matching, SEC/FINRA compliance enforcement, Saga-orchestrated distributed transactions, and chaos engineering support.
 
 > **Local development only.** No cloud deployment required.
 
@@ -47,21 +47,21 @@ A high-integrity US equity trading engine built with Java 21 and Spring Boot 3.x
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 brew install --cask docker          # Docker Desktop
-brew install openjdk@21             # Java 21
+brew install openjdk@25             # Java 25
 brew install maven                  # Maven
 brew install node                   # Node.js (for Playwright)
 npm install -g allure-commandline   # Allure CLI
 ```
 
-After installing Java 21 on Mac, add to your shell profile (`~/.zshrc` or `~/.bash_profile`):
+After installing Java 25 on Mac, add to your shell profile (`~/.zshrc` or `~/.bash_profile`):
 ```bash
-export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+export JAVA_HOME=$(/usr/libexec/java_home -v 25)
 export PATH=$JAVA_HOME/bin:$PATH
 ```
 
 ### Windows
 1. **Docker Desktop** — download from [docker.com](https://www.docker.com/products/docker-desktop). Enable WSL 2 backend when prompted.
-2. **Java 21** — download from [Adoptium](https://adoptium.net/). Run the installer; it sets `JAVA_HOME` automatically.
+2. **Java 25** — download from [Adoptium](https://adoptium.net/). Run the installer; it sets `JAVA_HOME` automatically.
 3. **Maven** — download from [maven.apache.org](https://maven.apache.org/download.cgi). Extract and add `bin/` to your `PATH` in System Environment Variables.
 4. **Node.js** — download from [nodejs.org](https://nodejs.org/) (LTS version).
 5. **Allure CLI** — run in PowerShell: `npm install -g allure-commandline`
@@ -69,7 +69,7 @@ export PATH=$JAVA_HOME/bin:$PATH
 Verify all installations:
 ```bash
 docker --version   # Docker 24+
-java --version     # openjdk 21
+java --version     # openjdk 25
 mvn --version      # Apache Maven 3.9+
 node --version     # v20+
 ```
@@ -463,7 +463,7 @@ Open Docker Desktop → Settings → Resources → increase Memory to at least *
 
 | Layer | Technology |
 |---|---|
-| Language | Java 21 |
+| Language | Java 25 |
 | Framework | Spring Boot 3.2, Spring Cloud 2023 |
 | API Gateway | Spring Cloud Gateway |
 | Message Bus | Apache Kafka (Confluent 7.5) |
